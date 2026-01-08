@@ -28,13 +28,6 @@ jobs:
     - name: Build Windows Distribution
       run: gradle packageMsi packageExe --no-daemon
 
-    - name: Extract version name
-      id: version
-      run: |
-        $VERSION = Select-String -Path "build.gradle.kts" -Pattern 'version\s*=\s*"([^"]+)"' | ForEach-Object { $_.Matches.Groups[1].Value }
-        echo "VERSION_NAME=$VERSION" >> $env:GITHUB_OUTPUT
-      shell: pwsh
-
     - name: Find built files
       id: find_files
       run: |
@@ -45,28 +38,24 @@ jobs:
       shell: pwsh
 
     - name: Upload EXE Artifact
-      if: steps.find_files.outputs.EXE_PATH != ''
       uses: actions/upload-artifact@v4
       with:
-        name: MicMute-v${{ steps.version.outputs.VERSION_NAME }}-exe
-        path: ${{ steps.find_files.outputs.EXE_PATH }}
+        name: MicMute-exe
+        path: build/compose/binaries/main/exe/*.exe
 
     - name: Upload MSI Artifact
-      if: steps.find_files.outputs.MSI_PATH != ''
       uses: actions/upload-artifact@v4
       with:
-        name: MicMute-v${{ steps.version.outputs.VERSION_NAME }}-msi
-        path: ${{ steps.find_files.outputs.MSI_PATH }}
+        name: MicMute-msi
+        path: build/compose/binaries/main/msi/*.msi
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: v${{ steps.version.outputs.VERSION_NAME }}
-        name: MicMute v${{ steps.version.outputs.VERSION_NAME }}
+        tag_name: v1.0.0
+        name: MicMute v1.0.0
         body: |
-          ## 🎙️ MicMute v${{ steps.version.outputs.VERSION_NAME }}
+          ## 🎙️ MicMute v1.0.0
           
           Simple Windows tray app to mute/unmute your microphone with one click.
           
@@ -83,6 +72,7 @@ jobs:
           ### Made by Suvojeet Sengupta
         draft: false
         prerelease: false
+        make_latest: true
         files: |
-          ${{ steps.find_files.outputs.EXE_PATH }}
-          ${{ steps.find_files.outputs.MSI_PATH }}
+          build/compose/binaries/main/exe/*.exe
+          build/compose/binaries/main/msi/*.msi
