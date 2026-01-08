@@ -45,3 +45,34 @@ jobs:
       with:
         name: MicMute-S-Installer
         path: installer/MicMute-S-Setup.exe
+
+    - name: Get Current Date
+      id: date
+      run: echo "date=$(Get-Date -Format 'yyyy.MM.dd')" >> $env:GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ steps.date.outputs.date }}
+        name: MicMute-S v${{ steps.date.outputs.date }}
+        body: |
+          ## MicMute-S Release
+          
+          **Developed by Suvojeet Sengupta**
+          
+          ### Features
+          - 🎤 Global microphone mute/unmute with single click
+          - 📌 System tray integration
+          - 🔒 Force Mute mode (prevents unmuting)
+          - 🚀 Run on Windows startup
+          
+          ### Downloads
+          - `MicMute-S-Setup.exe` - Full installer (Recommended)
+          - `MicMute-S.exe` - Portable executable
+        files: |
+          installer/MicMute-S-Setup.exe
+          build/Release/MicMute-S.exe
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

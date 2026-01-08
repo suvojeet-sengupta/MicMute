@@ -16,7 +16,7 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=installer
 OutputBaseFilename=MicMute-S-Setup
-SetupIconFile=resources\app.ico
+; SetupIconFile removed - using default Inno Setup icon
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
