@@ -17,8 +17,8 @@ jobs:
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v1.1
 
-    - name: Setup Inno Setup
-      uses: Minion1506/InnoSetup-Action@v1
+    - name: Install Inno Setup
+      run: choco install innosetup -y
 
     - name: Create Build Directory
       run: mkdir build\Release
