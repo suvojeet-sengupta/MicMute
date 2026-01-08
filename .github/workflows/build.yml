@@ -1,0 +1,47 @@
+name: Build MicMute-S
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v1.1
+
+    - name: Setup Inno Setup
+      uses: thirdw/inno-setup/action@v1.4.1
+
+    - name: Create Build Directory
+      run: mkdir build\Release
+
+    - name: Compile Resources
+      run: |
+        rc.exe /v /fo resources\app.res resources\app.rc
+
+    - name: Compile C++ Application
+      run: |
+        cl.exe /nologo /O2 /EHsc /D "NDEBUG" /D "_WINDOWS" /W3 /Fe"build\Release\MicMute-S.exe" src\main.cpp src\audio.cpp resources\app.res user32.lib gdi32.lib shell32.lib ole32.lib uuid.lib Mmdevapi.lib
+        
+    - name: Build Installer
+      run: iscc installer.iss
+
+    - name: Upload Build Artifacts (Exe)
+      uses: actions/upload-artifact@v4
+      with:
+        name: MicMute-S-Executable
+        path: build/Release/MicMute-S.exe
+
+    - name: Upload Installer
+      uses: actions/upload-artifact@v4
+      with:
+        name: MicMute-S-Installer
+        path: installer/MicMute-S-Setup.exe
