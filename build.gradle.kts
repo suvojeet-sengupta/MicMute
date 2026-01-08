@@ -41,7 +41,6 @@ compose.desktop {
             windows {
                 menuGroup = "MicMute"
                 upgradeUuid = "8d3b2c1a-4e5f-6a7b-8c9d-0e1f2a3b4c5d"
-                iconFile.set(project.file("src/main/resources/icons/app_icon.ico"))
             }
         }
         
