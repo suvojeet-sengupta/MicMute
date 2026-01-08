@@ -17,8 +17,10 @@ repositories {
 dependencies {
     // Compose Desktop
     implementation(compose.desktop.currentOs)
+    implementation(compose.desktop.common)
     implementation(compose.material3)
     implementation(compose.materialIconsExtended)
+    implementation(compose.components.resources)
     
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
