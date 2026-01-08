@@ -2,6 +2,8 @@ package com.suvmusic.micmute
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.rememberTrayState
@@ -34,21 +36,21 @@ fun App(
         },
         menu = {
             Item(
-                text = if (isMuted) "🔊 Unmute Microphone" else "🔇 Mute Microphone",
+                text = if (isMuted) "Unmute Microphone" else "Mute Microphone",
                 onClick = {
                     isMuted = micController.toggleMute()
                 }
             )
             Separator()
             Item(
-                text = "⚙️ Settings",
+                text = "Settings",
                 onClick = {
                     isWindowVisible = true
                 }
             )
             Separator()
             Item(
-                text = "❌ Exit",
+                text = "Exit",
                 onClick = onExitRequest
             )
         }
@@ -66,8 +68,7 @@ fun App(
             },
             title = "MicMute",
             state = rememberWindowState(
-                width = androidx.compose.ui.unit.dp(450),
-                height = androidx.compose.ui.unit.dp(600)
+                size = DpSize(450.dp, 600.dp)
             ),
             resizable = false,
             icon = painterResource("icons/app_icon.png")

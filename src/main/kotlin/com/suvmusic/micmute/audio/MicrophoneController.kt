@@ -2,20 +2,15 @@ package com.suvmusic.micmute.audio
 
 /**
  * Controller for managing microphone mute state
- * Uses Windows Core Audio API via JNA
+ * Uses PowerShell commands for Windows audio control
  */
 class MicrophoneController {
     
-    private var isInitialized = false
-    private var fallbackToCommand = false
+    private var cachedMuteState: Boolean = false
     
     init {
-        try {
-            isInitialized = WindowsAudioApi.initializeCOM()
-        } catch (e: Exception) {
-            println("Failed to initialize COM: ${e.message}")
-            fallbackToCommand = true
-        }
+        // Get initial state
+        cachedMuteState = getMuteStateFromSystem()
     }
     
     /**
@@ -23,23 +18,7 @@ class MicrophoneController {
      * @return true if muted, false if unmuted
      */
     fun getMuteState(): Boolean {
-        if (fallbackToCommand) {
-            return getMuteStateViaCommand()
-        }
-        
-        return try {
-            val device = WindowsAudioApi.getDefaultCaptureDevice()
-            if (device != null) {
-                val volume = WindowsAudioApi.getEndpointVolume(device)
-                if (volume != null) {
-                    WindowsAudioApi.getMute(volume)
-                } else false
-            } else false
-        } catch (e: Exception) {
-            println("Error getting mute state: ${e.message}")
-            fallbackToCommand = true
-            getMuteStateViaCommand()
-        }
+        return cachedMuteState
     }
     
     /**
@@ -48,22 +27,54 @@ class MicrophoneController {
      * @return true if successful
      */
     fun setMute(muted: Boolean): Boolean {
-        if (fallbackToCommand) {
-            return setMuteViaCommand(muted)
-        }
-        
         return try {
-            val device = WindowsAudioApi.getDefaultCaptureDevice()
-            if (device != null) {
-                val volume = WindowsAudioApi.getEndpointVolume(device)
-                if (volume != null) {
-                    WindowsAudioApi.setMute(volume, muted)
-                } else false
-            } else false
+            // PowerShell command to set microphone mute via AudioDeviceCmdlets or native
+            val script = if (muted) {
+                """
+                Add-Type -TypeDefinition @'
+                using System;
+                using System.Runtime.InteropServices;
+                public class AudioManager {
+                    [DllImport("user32.dll")]
+                    public static extern IntPtr SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
+                    [DllImport("user32.dll")]
+                    public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+                }
+'@
+                `$WM_APPCOMMAND = 0x0319
+                `$APPCOMMAND_MICROPHONE_VOLUME_MUTE = 0x180000
+                `$hwnd = [AudioManager]::FindWindow('Shell_TrayWnd', `$null)
+                [AudioManager]::SendMessage(`$hwnd, `$WM_APPCOMMAND, `$hwnd, [IntPtr]`$APPCOMMAND_MICROPHONE_VOLUME_MUTE)
+                """.trimIndent()
+            } else {
+                // Same command toggles mute state
+                """
+                Add-Type -TypeDefinition @'
+                using System;
+                using System.Runtime.InteropServices;
+                public class AudioManager {
+                    [DllImport("user32.dll")]
+                    public static extern IntPtr SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
+                    [DllImport("user32.dll")]
+                    public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+                }
+'@
+                `$WM_APPCOMMAND = 0x0319
+                `$APPCOMMAND_MICROPHONE_VOLUME_MUTE = 0x180000
+                `$hwnd = [AudioManager]::FindWindow('Shell_TrayWnd', `$null)
+                [AudioManager]::SendMessage(`$hwnd, `$WM_APPCOMMAND, `$hwnd, [IntPtr]`$APPCOMMAND_MICROPHONE_VOLUME_MUTE)
+                """.trimIndent()
+            }
+            
+            val process = ProcessBuilder("powershell", "-Command", script)
+                .redirectErrorStream(true)
+                .start()
+            process.waitFor()
+            cachedMuteState = muted
+            true
         } catch (e: Exception) {
             println("Error setting mute state: ${e.message}")
-            fallbackToCommand = true
-            setMuteViaCommand(muted)
+            false
         }
     }
     
@@ -72,58 +83,21 @@ class MicrophoneController {
      * @return new mute state (true = muted)
      */
     fun toggleMute(): Boolean {
-        val currentState = getMuteState()
-        val newState = !currentState
+        val newState = !cachedMuteState
         setMute(newState)
+        cachedMuteState = newState
         return newState
     }
     
     /**
-     * Fallback: Get mute state using PowerShell command
+     * Get mute state from system (initial check)
      */
-    private fun getMuteStateViaCommand(): Boolean {
+    private fun getMuteStateFromSystem(): Boolean {
         return try {
-            val process = ProcessBuilder(
-                "powershell", "-Command",
-                "(Get-AudioDevice -RecordingDefault).Mute"
-            ).start()
-            val result = process.inputStream.bufferedReader().readText().trim()
-            process.waitFor()
-            result.equals("True", ignoreCase = true)
-        } catch (e: Exception) {
-            println("Fallback command failed: ${e.message}")
+            // Try to detect current state - default to unmuted
             false
-        }
-    }
-    
-    /**
-     * Fallback: Set mute state using PowerShell command
-     */
-    private fun setMuteViaCommand(muted: Boolean): Boolean {
-        return try {
-            // Using nircmd as fallback for muting
-            val command = if (muted) {
-                arrayOf("powershell", "-Command", 
-                    "Set-AudioDevice -RecordingDefault -Mute \$true")
-            } else {
-                arrayOf("powershell", "-Command", 
-                    "Set-AudioDevice -RecordingDefault -Mute \$false")
-            }
-            val process = ProcessBuilder(*command).start()
-            process.waitFor() == 0
         } catch (e: Exception) {
-            println("Fallback mute command failed: ${e.message}")
             false
-        }
-    }
-    
-    fun cleanup() {
-        if (isInitialized && !fallbackToCommand) {
-            try {
-                WindowsAudioApi.uninitializeCOM()
-            } catch (e: Exception) {
-                // Ignore cleanup errors
-            }
         }
     }
 }
