@@ -14,8 +14,8 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v1.1
+    - name: Setup MSVC Developer Environment
+      uses: ilammy/msvc-dev-cmd@v1
 
     - name: Install Inno Setup
       run: choco install innosetup -y
