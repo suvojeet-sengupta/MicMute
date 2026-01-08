@@ -29,7 +29,7 @@ jobs:
 
     - name: Compile C++ Application
       run: |
-        cl.exe /nologo /O2 /EHsc /D "NDEBUG" /D "_WINDOWS" /W3 /Fe"build\Release\MicMute-S.exe" src\main.cpp src\audio.cpp resources\app.res user32.lib gdi32.lib shell32.lib ole32.lib uuid.lib Mmdevapi.lib
+        cl.exe /nologo /O2 /EHsc /D "NDEBUG" /D "_WINDOWS" /W3 /Fe"build\Release\MicMute-S.exe" src\main.cpp src\audio.cpp resources\app.res user32.lib gdi32.lib shell32.lib ole32.lib uuid.lib Mmdevapi.lib advapi32.lib
         
     - name: Build Installer
       run: iscc installer.iss
