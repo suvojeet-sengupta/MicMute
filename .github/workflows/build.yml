@@ -18,7 +18,7 @@ jobs:
       uses: microsoft/setup-msbuild@v1.1
 
     - name: Setup Inno Setup
-      uses: thirdw/inno-setup/action@v1.4.1
+      uses: Minion1506/InnoSetup-Action@v1
 
     - name: Create Build Directory
       run: mkdir build\Release
