@@ -1,11 +1,15 @@
 package com.suvmusic.micmute
 
 import androidx.compose.runtime.*
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberTrayState
 import androidx.compose.ui.window.rememberWindowState
 import com.suvmusic.micmute.audio.MicrophoneController
@@ -28,35 +32,34 @@ fun App(
     // System Tray
     Tray(
         state = trayState,
-        icon = painterResource(if (isMuted) "icons/mic_off.png" else "icons/mic_on.png"),
+        icon = if (isMuted) MutedTrayIcon else ActiveTrayIcon,
         tooltip = if (isMuted) "Microphone Muted - Click to Unmute" else "Microphone Active - Click to Mute",
         onAction = {
-            // Single click toggles mute
             isMuted = micController.toggleMute()
         },
         menu = {
             Item(
-                text = if (isMuted) "Unmute Microphone" else "Mute Microphone",
+                if (isMuted) "Unmute Microphone" else "Mute Microphone",
                 onClick = {
                     isMuted = micController.toggleMute()
                 }
             )
             Separator()
             Item(
-                text = "Settings",
+                "Settings",
                 onClick = {
                     isWindowVisible = true
                 }
             )
             Separator()
             Item(
-                text = "Exit",
+                "Exit",
                 onClick = onExitRequest
             )
         }
     )
     
-    // Main Window (Setup or Settings)
+    // Main Window
     if (isWindowVisible) {
         Window(
             onCloseRequest = { 
@@ -67,11 +70,9 @@ fun App(
                 }
             },
             title = "MicMute",
-            state = rememberWindowState(
-                size = DpSize(450.dp, 600.dp)
-            ),
+            state = rememberWindowState(size = DpSize(450.dp, 600.dp)),
             resizable = false,
-            icon = painterResource("icons/app_icon.png")
+            icon = AppIcon
         ) {
             MicMuteTheme {
                 SetupScreen(
@@ -87,5 +88,29 @@ fun App(
                 )
             }
         }
+    }
+}
+
+// Active microphone icon (green)
+object ActiveTrayIcon : Painter() {
+    override val intrinsicSize = Size(256f, 256f)
+    override fun DrawScope.onDraw() {
+        drawCircle(Color(0xFF22C55E))
+    }
+}
+
+// Muted microphone icon (red)
+object MutedTrayIcon : Painter() {
+    override val intrinsicSize = Size(256f, 256f)
+    override fun DrawScope.onDraw() {
+        drawCircle(Color(0xFFEF4444))
+    }
+}
+
+// App icon (purple)
+object AppIcon : Painter() {
+    override val intrinsicSize = Size(256f, 256f)
+    override fun DrawScope.onDraw() {
+        drawCircle(Color(0xFF8B5CF6))
     }
 }
