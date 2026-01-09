@@ -23,7 +23,7 @@ void UninitializeAudio() {
     CoUninitialize();
 }
 
-// Helper to apply mute state to a device collection
+// Helper to apply mute state to a device collection with retry
 void ApplyMuteToCollection(IMMDeviceCollection* pCollection, bool mute) {
     UINT count = 0;
     pCollection->GetCount(&count);
@@ -36,15 +36,27 @@ void ApplyMuteToCollection(IMMDeviceCollection* pCollection, bool mute) {
             IAudioEndpointVolume* pEndpointVolume = NULL;
             pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pEndpointVolume);
             if (pEndpointVolume) {
-                HRESULT hr = pEndpointVolume->SetMute(mute, NULL);
-                DebugLog("  Device %d: SetMute(%d) returned hr=0x%08X", i, mute, hr);
-                if (SUCCEEDED(hr)) {
-                    // Small delay to let Windows process the state change
-                    Sleep(50);
-                    // Verify mute was actually set
-                    BOOL actualMute = FALSE;
-                    pEndpointVolume->GetMute(&actualMute);
-                    DebugLog("  Device %d: After SetMute, actual mute state = %d", i, actualMute);
+                // Try multiple times to combat external apps unmuting
+                for (int attempt = 0; attempt < 5; attempt++) {
+                    HRESULT hr = pEndpointVolume->SetMute(mute, NULL);
+                    DebugLog("  Device %d: Attempt %d - SetMute(%d) returned hr=0x%08X", i, attempt+1, mute, hr);
+                    
+                    if (SUCCEEDED(hr)) {
+                        Sleep(100);  // Wait longer
+                        
+                        // Verify mute was actually set
+                        BOOL actualMute = FALSE;
+                        pEndpointVolume->GetMute(&actualMute);
+                        DebugLog("  Device %d: Attempt %d - After verify, actual mute = %d", i, attempt+1, actualMute);
+                        
+                        // If state matches what we wanted, we're done
+                        if ((mute && actualMute) || (!mute && !actualMute)) {
+                            DebugLog("  Device %d: Mute state successfully set on attempt %d", i, attempt+1);
+                            break;
+                        }
+                        // Otherwise, something unmuted it, try again
+                        DebugLog("  Device %d: Mute was reverted, retrying...", i);
+                    }
                 }
                 pEndpointVolume->Release();
             }
