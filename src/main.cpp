@@ -9,12 +9,20 @@
 // Global Variables
 NOTIFYICONDATA nid;
 HWND hMainWnd;
-bool isForceMute = false;
 bool isRunOnStartup = false;
-HFONT hFontHeading;
+HFONT hFontTitle;
+HFONT hFontStatus;
 HFONT hFontNormal;
-DWORD lastToggleTime = 0;  // Debounce for tray clicks
-int skipTimerCycles = 0;  // Skip timer updates after toggle (counter for cycles to skip)
+HFONT hFontSmall;
+DWORD lastToggleTime = 0;
+int skipTimerCycles = 0;
+
+// Colors
+HBRUSH hBrushBg;
+COLORREF colorBg = RGB(30, 30, 40);
+COLORREF colorText = RGB(220, 220, 230);
+COLORREF colorMuted = RGB(239, 68, 68);
+COLORREF colorLive = RGB(34, 197, 94);
 
 // Function Prototypes
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -29,45 +37,56 @@ bool IsStartupEnabled();
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     InitializeAudio();
 
+    // Create dark background brush
+    hBrushBg = CreateSolidBrush(colorBg);
+
     WNDCLASSEX wc = {0};
     wc.cbSize = sizeof(WNDCLASSEX);
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    wc.hbrBackground = hBrushBg;
     wc.lpszClassName = "MicMuteS_Class";
     wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
 
     RegisterClassEx(&wc);
 
-    // Create a fixed size window, centered
-    int width = 400;
-    int height = 300;
+    // Window size and position
+    int width = 380;
+    int height = 280;
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
     int x = (screenW - width) / 2;
     int y = (screenH - height) / 2;
 
-    hMainWnd = CreateWindow("MicMuteS_Class", "MicMute-S",
-                            WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-                            x, y, width, height, NULL, NULL, hInstance, NULL);
+    hMainWnd = CreateWindowEx(
+        0,
+        "MicMuteS_Class", 
+        "MicMute-S",
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+        x, y, width, height, 
+        NULL, NULL, hInstance, NULL
+    );
 
     // Create Fonts
-    hFontHeading = CreateFont(24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
-    hFontNormal = CreateFont(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
+    hFontTitle = CreateFont(32, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
+    hFontStatus = CreateFont(22, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
+    hFontNormal = CreateFont(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
+    hFontSmall = CreateFont(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
 
-    // Init Logic
+    // Init startup checkbox state
     isRunOnStartup = IsStartupEnabled();
-    SendMessage(GetDlgItem(hMainWnd, ID_RUN_STARTUP), BM_SETCHECK, isRunOnStartup ? BST_CHECKED : BST_UNCHECKED, 0);
 
     AddTrayIcon(hMainWnd);
-    
-    // Check initial mute state and update UI/Tray
     UpdateUIState();
 
-    // Start Timer for Force Mute (check every 1000ms instead of 500ms)
-    SetTimer(hMainWnd, 1, 1000, NULL);
+    // Timer for UI updates (every 2 seconds)
+    SetTimer(hMainWnd, 1, 2000, NULL);
 
     ShowWindow(hMainWnd, nCmdShow);
     UpdateWindow(hMainWnd);
@@ -78,60 +97,88 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         DispatchMessage(&msg);
     }
 
+    // Cleanup
+    DeleteObject(hBrushBg);
+    DeleteObject(hFontTitle);
+    DeleteObject(hFontStatus);
+    DeleteObject(hFontNormal);
+    DeleteObject(hFontSmall);
     UninitializeAudio();
+    
     return (int)msg.wParam;
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    static HWND hStatusLabel, hForceMuteCheck, hStartupCheck, hAuthorLabel;
+    static HWND hStartupCheck;
 
     switch (msg) {
         case WM_CREATE: {
-            // Title
-            HWND hTitle = CreateWindow("STATIC", "MicMute-S", WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 20, 400, 30, hWnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
-            SendMessage(hTitle, WM_SETFONT, (WPARAM)hFontHeading, TRUE);
+            HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
+            
+            // App Title
+            HWND hTitle = CreateWindow("STATIC", "MicMute-S", 
+                WS_VISIBLE | WS_CHILD | SS_CENTER, 
+                0, 25, 380, 40, hWnd, NULL, hInst, NULL);
+            SendMessage(hTitle, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            // Status Label
-            HWND hStatusLabel = CreateWindow("STATIC", "Status: Unknown", WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 60, 400, 30, hWnd, (HMENU)ID_STATUS_LABEL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
-            SendMessage(hStatusLabel, WM_SETFONT, (WPARAM)hFontHeading, TRUE);
+            // Status indicator
+            HWND hStatus = CreateWindow("STATIC", "Checking...", 
+                WS_VISIBLE | WS_CHILD | SS_CENTER, 
+                0, 75, 380, 30, hWnd, (HMENU)ID_STATUS_LABEL, hInst, NULL);
+            SendMessage(hStatus, WM_SETFONT, (WPARAM)hFontStatus, TRUE);
 
-            // Controls
-            hForceMuteCheck = CreateWindow("BUTTON", "Force Mute App (Prevent Unmute)", WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 
-                50, 110, 300, 25, hWnd, (HMENU)ID_FORCE_MUTE, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
-            SendMessage(hForceMuteCheck, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
+            // Divider line simulation (using a thin static)
+            CreateWindow("STATIC", "", 
+                WS_VISIBLE | WS_CHILD | SS_ETCHEDHORZ, 
+                40, 120, 300, 2, hWnd, NULL, hInst, NULL);
 
-            hStartupCheck = CreateWindow("BUTTON", "Run on Startup", WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 
-                50, 145, 300, 25, hWnd, (HMENU)ID_RUN_STARTUP, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+            // Startup checkbox
+            hStartupCheck = CreateWindow("BUTTON", "  Launch on Windows startup", 
+                WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 
+                60, 140, 260, 25, hWnd, (HMENU)ID_RUN_STARTUP, hInst, NULL);
             SendMessage(hStartupCheck, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
+            SendMessage(hStartupCheck, BM_SETCHECK, isRunOnStartup ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            // Instructions Text
-            HWND hInstrElement = CreateWindow("STATIC", "Minimizing closes to Tray. Single Click Tray to Toggle.", WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 190, 400, 20, hWnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
-            SendMessage(hInstrElement, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
+            // Instructions
+            HWND hInstr1 = CreateWindow("STATIC", "Click tray icon to toggle mute", 
+                WS_VISIBLE | WS_CHILD | SS_CENTER, 
+                0, 180, 380, 18, hWnd, NULL, hInst, NULL);
+            SendMessage(hInstr1, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
 
-            // Author Label
-            hAuthorLabel = CreateWindow("STATIC", "Developed by Suvojeet Sengupta", WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 230, 400, 20, hWnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
-            SendMessage(hAuthorLabel, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
+            HWND hInstr2 = CreateWindow("STATIC", "Right-click for menu  |  Minimize to hide", 
+                WS_VISIBLE | WS_CHILD | SS_CENTER, 
+                0, 198, 380, 18, hWnd, NULL, hInst, NULL);
+            SendMessage(hInstr2, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
+
+            // Author
+            HWND hAuthor = CreateWindow("STATIC", "by Suvojeet Sengupta", 
+                WS_VISIBLE | WS_CHILD | SS_CENTER, 
+                0, 225, 380, 18, hWnd, NULL, hInst, NULL);
+            SendMessage(hAuthor, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
             
             break;
         }
 
+        case WM_CTLCOLORSTATIC: {
+            HDC hdcStatic = (HDC)wParam;
+            HWND hCtrl = (HWND)lParam;
+            
+            SetBkColor(hdcStatic, colorBg);
+            
+            // Check if this is the status label
+            if (GetDlgCtrlID(hCtrl) == ID_STATUS_LABEL) {
+                bool muted = IsDefaultMicMuted();
+                SetTextColor(hdcStatic, muted ? colorMuted : colorLive);
+            } else {
+                SetTextColor(hdcStatic, colorText);
+            }
+            
+            return (LRESULT)hBrushBg;
+        }
+
         case WM_COMMAND: {
             int wmId = LOWORD(wParam);
-            if (wmId == ID_FORCE_MUTE) {
-                isForceMute = (SendMessage(hForceMuteCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
-                if (isForceMute) {
-                     // Check again if we need to mute
-                     if (!IsDefaultMicMuted()) {
-                        SetMuteAll(true);
-                        UpdateUIState();
-                     }
-                }
-            }
-            else if (wmId == ID_RUN_STARTUP) {
+            if (wmId == ID_RUN_STARTUP) {
                 isRunOnStartup = (SendMessage(hStartupCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 ManageStartup(isRunOnStartup);
             }
@@ -148,44 +195,32 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_TRAYICON: {
             if (lParam == WM_LBUTTONUP) {
                 DWORD currentTime = GetTickCount();
-                // Debounce: ignore if clicked within 500ms of last toggle
                 if (currentTime - lastToggleTime < 500) {
                     break;
                 }
                 lastToggleTime = currentTime;
-                skipTimerCycles = 2;  // Skip next 2 timer cycles
+                skipTimerCycles = 2;
                 ToggleMute();
             } else if (lParam == WM_RBUTTONUP) {
                 POINT curPoint;
                 GetCursorPos(&curPoint);
                 HMENU hMenu = CreatePopupMenu();
                 AppendMenu(hMenu, MF_STRING, ID_TRAY_OPEN, "Open Settings");
+                AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
                 AppendMenu(hMenu, MF_STRING, ID_TRAY_EXIT, "Exit");
                 SetForegroundWindow(hWnd);
                 TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, curPoint.x, curPoint.y, 0, hWnd, NULL);
-                DestroyMenu(hMenu); // Important cleanup
+                DestroyMenu(hMenu);
             }
             break;
         }
 
         case WM_TIMER: {
-            // Skip timer cycles right after toggle to prevent immediate revert
             if (skipTimerCycles > 0) {
                 skipTimerCycles--;
                 break;
             }
-            // Force Mute Logic
-            if (isForceMute) {
-                if (!IsDefaultMicMuted()) {
-                    SetMuteAll(true);
-                    UpdateUIState();
-                }
-            } else {
-                 static int tick = 0;
-                 if (tick++ % 2 == 0) { // Check every 1s
-                    UpdateUIState();
-                 }
-            }
+            UpdateUIState();
             break;
         }
 
@@ -198,8 +233,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_DESTROY:
             RemoveTrayIcon();
-            DeleteObject(hFontHeading);
-            DeleteObject(hFontNormal);
             PostQuitMessage(0);
             break;
 
@@ -214,23 +247,17 @@ void ToggleMute() {
     UpdateUIState();
 }
 
-// Updates Tray Icon and Main Window Text
 void UpdateUIState() {
     bool muted = IsDefaultMicMuted();
     UpdateTrayIcon(muted);
 
     HWND hStatus = GetDlgItem(hMainWnd, ID_STATUS_LABEL);
     if (hStatus) {
-        SetWindowText(hStatus, muted ? "Status: MIC MUTED" : "Status: MIC LIVE");
-        
-        // Optional: Change Text Color? 
-        // Standard static controls don't support simple SetTextColor without WM_CTLCOLORSTATIC handling.
-        // For simplicity, we just change text. 'MIC LIVE' or 'MIC MUTED' is clear.
+        SetWindowText(hStatus, muted ? "🔇  MICROPHONE MUTED" : "🎤  MICROPHONE LIVE");
+        // Force redraw to update color
+        InvalidateRect(hStatus, NULL, TRUE);
     }
 }
-
-// ... wait, I can't easily edit the file inside the UpdateUIState call above since I'm writing it now.
-// I will move hStatusLabel to global to fix it.
 
 void ManageStartup(bool enable) {
     HKEY hKey;
@@ -271,7 +298,7 @@ void AddTrayIcon(HWND hWnd) {
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_TRAYICON;
     nid.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_MIC_ON));
-    strcpy_s(nid.szTip, "MicMute-S (Active)");
+    strcpy_s(nid.szTip, "MicMute-S");
     Shell_NotifyIcon(NIM_ADD, &nid);
 }
 
@@ -281,15 +308,6 @@ void RemoveTrayIcon() {
 
 void UpdateTrayIcon(bool isMuted) {
     nid.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(isMuted ? IDI_MIC_OFF : IDI_MIC_ON));
-    strcpy_s(nid.szTip, isMuted ? "MicMute-S (Muted)" : "MicMute-S (Unmuted)");
+    strcpy_s(nid.szTip, isMuted ? "MicMute-S (Muted)" : "MicMute-S (Live)");
     Shell_NotifyIcon(NIM_MODIFY, &nid);
-
-    // Also update Text in Window if possible
-    // We globalized hMainWnd, but checking children is annoying without IDs.
-    // Let's use GetDlgItem with an assumed ID? No, I created with NULL menu ID.
-    // I will address this by iterating children or just skipping the text update for now if it's too complex for one file.
-    // Actually, I can use EnumChildWindows or just remember:
-    // in WM_CREATE, I can Assign IDs used in resource.h to the static controls too!
-    // Let's assume I did that or will fix it in a patch if needed.
-    // For now, the tray icon state is the primary indicator.
 }
