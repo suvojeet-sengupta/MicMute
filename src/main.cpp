@@ -43,6 +43,7 @@ COLORREF colorMeterBg = RGB(25, 25, 35);
 // Dragging
 bool isDragging = false;
 POINT dragStart;
+POINT clickStart;  // Initial click position to detect drag vs click
 bool isMeterDragging = false;
 POINT meterDragStart;
 
@@ -280,10 +281,13 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_LBUTTONDOWN:
             isDragging = true;
             SetCapture(hWnd);
+            GetCursorPos(&clickStart);  // Store initial click position
             GetCursorPos(&dragStart);
-            RECT r; GetWindowRect(hWnd, &r);
-            dragStart.x -= r.left;
-            dragStart.y -= r.top;
+            {
+                RECT r; GetWindowRect(hWnd, &r);
+                dragStart.x -= r.left;
+                dragStart.y -= r.top;
+            }
             return 0;
         
         case WM_MOUSEMOVE:
@@ -299,8 +303,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 ReleaseCapture();
                 SaveOverlayPosition();
                 POINT pt; GetCursorPos(&pt);
-                RECT r; GetWindowRect(hWnd, &r);
-                if (abs((pt.x - r.left) - dragStart.x) < 5 && abs((pt.y - r.top) - dragStart.y) < 5) {
+                // Only toggle mute if mouse didn't move much (click, not drag)
+                if (abs(pt.x - clickStart.x) < 10 && abs(pt.y - clickStart.y) < 10) {
                     ToggleMute();
                 }
             }
