@@ -611,6 +611,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             break;
 
+        case WM_NCHITTEST: {
+            // Make the window draggable from anywhere
+            LRESULT hit = DefWindowProc(hWnd, msg, wParam, lParam);
+            if (hit == HTCLIENT) {
+                return HTCAPTION;
+            }
+            return hit;
+        }
+
         case WM_SYSCOMMAND:
             if ((wParam & 0xFFF0) == SC_MINIMIZE) {
                 ShowWindow(hWnd, SW_HIDE);
