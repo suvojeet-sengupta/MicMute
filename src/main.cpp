@@ -14,7 +14,7 @@ bool isRunOnStartup = false;
 HFONT hFontHeading;
 HFONT hFontNormal;
 DWORD lastToggleTime = 0;  // Debounce for tray clicks
-bool skipNextTimerUpdate = false;  // Skip timer update right after toggle
+int skipTimerCycles = 0;  // Skip timer updates after toggle (counter for cycles to skip)
 
 // Function Prototypes
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -66,8 +66,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // Check initial mute state and update UI/Tray
     UpdateUIState();
 
-    // Start Timer for Force Mute (check every 500ms)
-    SetTimer(hMainWnd, 1, 500, NULL);
+    // Start Timer for Force Mute (check every 1000ms instead of 500ms)
+    SetTimer(hMainWnd, 1, 1000, NULL);
 
     ShowWindow(hMainWnd, nCmdShow);
     UpdateWindow(hMainWnd);
@@ -148,12 +148,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_TRAYICON: {
             if (lParam == WM_LBUTTONUP) {
                 DWORD currentTime = GetTickCount();
-                // Debounce: ignore if clicked within 300ms of last toggle
-                if (currentTime - lastToggleTime < 300) {
+                // Debounce: ignore if clicked within 500ms of last toggle
+                if (currentTime - lastToggleTime < 500) {
                     break;
                 }
                 lastToggleTime = currentTime;
-                skipNextTimerUpdate = true;  // Skip next timer check
+                skipTimerCycles = 2;  // Skip next 2 timer cycles
                 ToggleMute();
             } else if (lParam == WM_RBUTTONUP) {
                 POINT curPoint;
@@ -169,9 +169,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
 
         case WM_TIMER: {
-            // Skip one timer cycle right after toggle to prevent immediate revert
-            if (skipNextTimerUpdate) {
-                skipNextTimerUpdate = false;
+            // Skip timer cycles right after toggle to prevent immediate revert
+            if (skipTimerCycles > 0) {
+                skipTimerCycles--;
                 break;
             }
             // Force Mute Logic

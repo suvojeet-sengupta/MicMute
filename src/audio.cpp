@@ -21,7 +21,11 @@ void ApplyMuteToCollection(IMMDeviceCollection* pCollection, bool mute) {
             IAudioEndpointVolume* pEndpointVolume = NULL;
             pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pEndpointVolume);
             if (pEndpointVolume) {
-                pEndpointVolume->SetMute(mute, NULL);
+                HRESULT hr = pEndpointVolume->SetMute(mute, NULL);
+                if (SUCCEEDED(hr)) {
+                    // Small delay to let Windows process the state change
+                    Sleep(50);
+                }
                 pEndpointVolume->Release();
             }
             pDevice->Release();
