@@ -19,7 +19,7 @@ void CreateOverlayWindow(HINSTANCE hInstance) {
     
     if (hOverlayWnd) {
         // Set initial transparency
-        SetLayeredWindowAttributes(hOverlayWnd, 0, (BYTE)overlayOpacity, LWA_ALPHA);
+        SetLayeredWindowAttributes(hOverlayWnd, colorChroma, (BYTE)overlayOpacity, LWA_ALPHA | LWA_COLORKEY);
         ShowWindow(hOverlayWnd, SW_SHOW);
         UpdateOverlay();
     }

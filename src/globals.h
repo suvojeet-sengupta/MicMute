@@ -41,11 +41,13 @@ extern COLORREF colorLive;
 extern COLORREF colorOverlayBgMuted;
 extern COLORREF colorOverlayBgLive;
 extern COLORREF colorMeterBg;
+extern COLORREF colorChroma;
 
 extern HBRUSH hBrushBg;
 extern HBRUSH hBrushOverlayMuted;
 extern HBRUSH hBrushOverlayLive;
 extern HBRUSH hBrushMeterBg;
+extern HBRUSH hBrushChroma;
 
 // Dragging
 extern bool isDragging;

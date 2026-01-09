@@ -35,11 +35,13 @@ COLORREF colorLive = RGB(34, 197, 94);
 COLORREF colorOverlayBgMuted = RGB(180, 40, 40);
 COLORREF colorOverlayBgLive = RGB(30, 150, 60);
 COLORREF colorMeterBg = RGB(25, 25, 35);
+COLORREF colorChroma = RGB(255, 0, 255); // Magenta
 
 HBRUSH hBrushBg;
 HBRUSH hBrushOverlayMuted;
 HBRUSH hBrushOverlayLive;
 HBRUSH hBrushMeterBg;
+HBRUSH hBrushChroma;
 
 bool isDragging = false;
 POINT dragStart;

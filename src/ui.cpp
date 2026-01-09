@@ -23,7 +23,7 @@ void ToggleMute() {
     // Fade out animation
     if (hOverlayWnd && IsWindowVisible(hOverlayWnd)) {
         for (int i = overlayOpacity; i >= 100; i -= 30) {
-            SetLayeredWindowAttributes(hOverlayWnd, 0, (BYTE)i, LWA_ALPHA);
+            SetLayeredWindowAttributes(hOverlayWnd, colorChroma, (BYTE)i, LWA_ALPHA | LWA_COLORKEY);
             Sleep(15);
         }
     }
@@ -34,9 +34,9 @@ void ToggleMute() {
     // Fade in animation
     if (hOverlayWnd && IsWindowVisible(hOverlayWnd)) {
         for (int i = 100; i <= overlayOpacity; i += 30) {
-            SetLayeredWindowAttributes(hOverlayWnd, 0, (BYTE)i, LWA_ALPHA);
+            SetLayeredWindowAttributes(hOverlayWnd, colorChroma, (BYTE)i, LWA_ALPHA | LWA_COLORKEY);
             Sleep(15);
         }
-        SetLayeredWindowAttributes(hOverlayWnd, 0, (BYTE)overlayOpacity, LWA_ALPHA);
+        SetLayeredWindowAttributes(hOverlayWnd, colorChroma, (BYTE)overlayOpacity, LWA_ALPHA | LWA_COLORKEY);
     }
 }

@@ -37,6 +37,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     hBrushOverlayMuted = CreateSolidBrush(colorOverlayBgMuted);
     hBrushOverlayLive = CreateSolidBrush(colorOverlayBgLive);
     hBrushMeterBg = CreateSolidBrush(colorMeterBg);
+    hBrushChroma = CreateSolidBrush(colorChroma);
 
     // Register main window class
     WNDCLASSEX wc = {0};
@@ -57,7 +58,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wcOverlay.lpfnWndProc = OverlayWndProc;
     wcOverlay.hInstance = hInstance;
     wcOverlay.hCursor = LoadCursor(NULL, IDC_HAND);
-    wcOverlay.hbrBackground = hBrushOverlayLive;
+    wcOverlay.hbrBackground = hBrushChroma;
     wcOverlay.lpszClassName = "MicMuteS_Overlay";
     RegisterClassEx(&wcOverlay);
 
@@ -163,6 +164,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     DeleteObject(hBrushOverlayMuted);
     DeleteObject(hBrushOverlayLive);
     DeleteObject(hBrushMeterBg);
+    DeleteObject(hBrushChroma);
     DeleteObject(hFontTitle);
     DeleteObject(hFontStatus);
     DeleteObject(hFontNormal);
