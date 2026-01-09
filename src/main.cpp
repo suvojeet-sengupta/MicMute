@@ -13,6 +13,8 @@ bool isForceMute = false;
 bool isRunOnStartup = false;
 HFONT hFontHeading;
 HFONT hFontNormal;
+DWORD lastToggleTime = 0;  // Debounce for tray clicks
+bool skipNextTimerUpdate = false;  // Skip timer update right after toggle
 
 // Function Prototypes
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -145,6 +147,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_TRAYICON: {
             if (lParam == WM_LBUTTONUP) {
+                DWORD currentTime = GetTickCount();
+                // Debounce: ignore if clicked within 300ms of last toggle
+                if (currentTime - lastToggleTime < 300) {
+                    break;
+                }
+                lastToggleTime = currentTime;
+                skipNextTimerUpdate = true;  // Skip next timer check
                 ToggleMute();
             } else if (lParam == WM_RBUTTONUP) {
                 POINT curPoint;
@@ -160,6 +169,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
 
         case WM_TIMER: {
+            // Skip one timer cycle right after toggle to prevent immediate revert
+            if (skipNextTimerUpdate) {
+                skipNextTimerUpdate = false;
+                break;
+            }
             // Force Mute Logic
             if (isForceMute) {
                 if (!IsDefaultMicMuted()) {
