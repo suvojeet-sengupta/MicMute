@@ -1,10 +1,12 @@
 #include <windows.h>
 #include <shellapi.h>
+#include <dwmapi.h>
 #include <string>
 #include "resource.h"
 #include "audio.h"
 
 #pragma comment(lib, "gdi32.lib")
+#pragma comment(lib, "dwmapi.lib")
 
 // Global Variables
 NOTIFYICONDATA nid;
@@ -21,6 +23,13 @@ HFONT hFontSmall;
 HFONT hFontOverlay;
 DWORD lastToggleTime = 0;
 int skipTimerCycles = 0;
+
+// Cached icons to prevent memory leak
+HICON hIconMicOn = NULL;
+HICON hIconMicOff = NULL;
+
+// Overlay animation
+int overlayOpacity = 220;
 
 // Level history for waveform
 #define LEVEL_HISTORY_SIZE 30
@@ -140,6 +149,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         NULL, NULL, hInstance, NULL
     );
 
+    // Apply rounded corners (Windows 11+)
+    DWM_WINDOW_CORNER_PREFERENCE cornerPref = DWMWCP_ROUND;
+    DwmSetWindowAttribute(hMainWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPref, sizeof(cornerPref));
+
+    // Pre-load icons to prevent memory leak from repeated LoadIcon calls
+    hIconMicOn = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_MIC_ON));
+    hIconMicOff = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_MIC_OFF));
+
     // Create Fonts
     hFontTitle = CreateFont(42, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
@@ -224,13 +241,15 @@ void CreateOverlayWindow(HINSTANCE hInstance) {
     LoadOverlayPosition(&overlayX, &overlayY);
     
     hOverlayWnd = CreateWindowEx(
-        WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
         "MicMuteS_Overlay", NULL, WS_POPUP,
         overlayX, overlayY, 100, 40,
         NULL, NULL, hInstance, NULL
     );
     
     if (hOverlayWnd) {
+        // Set initial transparency
+        SetLayeredWindowAttributes(hOverlayWnd, 0, (BYTE)overlayOpacity, LWA_ALPHA);
         ShowWindow(hOverlayWnd, SW_SHOW);
         UpdateOverlay();
     }
@@ -639,8 +658,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 void ToggleMute() {
+    // Fade out animation
+    if (hOverlayWnd && IsWindowVisible(hOverlayWnd)) {
+        for (int i = overlayOpacity; i >= 100; i -= 30) {
+            SetLayeredWindowAttributes(hOverlayWnd, 0, (BYTE)i, LWA_ALPHA);
+            Sleep(15);
+        }
+    }
+    
     ToggleMuteAll();
     UpdateUIState();
+    
+    // Fade in animation
+    if (hOverlayWnd && IsWindowVisible(hOverlayWnd)) {
+        for (int i = 100; i <= overlayOpacity; i += 30) {
+            SetLayeredWindowAttributes(hOverlayWnd, 0, (BYTE)i, LWA_ALPHA);
+            Sleep(15);
+        }
+        SetLayeredWindowAttributes(hOverlayWnd, 0, (BYTE)overlayOpacity, LWA_ALPHA);
+    }
 }
 
 void UpdateUIState() {
@@ -687,7 +723,7 @@ void AddTrayIcon(HWND hWnd) {
     nid.uID = ID_TRAY_APP_ICON;
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_TRAYICON;
-    nid.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_MIC_ON));
+    nid.hIcon = hIconMicOn;  // Use cached icon
     strcpy_s(nid.szTip, "MicMute-S");
     Shell_NotifyIcon(NIM_ADD, &nid);
 }
@@ -697,7 +733,7 @@ void RemoveTrayIcon() {
 }
 
 void UpdateTrayIcon(bool isMuted) {
-    nid.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(isMuted ? IDI_MIC_OFF : IDI_MIC_ON));
+    nid.hIcon = isMuted ? hIconMicOff : hIconMicOn;  // Use cached icons
     strcpy_s(nid.szTip, isMuted ? "MicMute-S (Muted)" : "MicMute-S (Live)");
     Shell_NotifyIcon(NIM_MODIFY, &nid);
 }
