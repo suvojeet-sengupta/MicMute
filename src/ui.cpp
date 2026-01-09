@@ -8,14 +8,19 @@
 #include <dwmapi.h>
 
 void UpdateUIState() {
+    static bool lastMuted = -1; // -1 for uninitialized
     bool muted = IsDefaultMicMuted();
-    UpdateTrayIcon(muted);
-    UpdateOverlay();
+    
+    if (muted != lastMuted) {
+        lastMuted = muted;
+        UpdateTrayIcon(muted);
+        UpdateOverlay();
 
-    HWND hStatus = GetDlgItem(hMainWnd, ID_STATUS_LABEL);
-    if (hStatus) {
-        SetWindowText(hStatus, muted ? "MICROPHONE MUTED" : "MICROPHONE LIVE");
-        InvalidateRect(hStatus, NULL, TRUE);
+        HWND hStatus = GetDlgItem(hMainWnd, ID_STATUS_LABEL);
+        if (hStatus) {
+            SetWindowText(hStatus, muted ? "MICROPHONE MUTED" : "MICROPHONE LIVE");
+            InvalidateRect(hStatus, NULL, TRUE);
+        }
     }
 }
 
