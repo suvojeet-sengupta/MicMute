@@ -6,8 +6,6 @@
 #include <Audioclient.h>
 #include <audiopolicy.h>
 
-// GUID for IAudioMeterInformation if not defined
-DEFINE_GUID(IID_IAudioMeterInformation, 0xC02216F6, 0x8C67, 0x4B5B, 0x9D, 0x00, 0xD0, 0x08, 0xE7, 0x3E, 0x00, 0x64);
 
 // Debug logging helper
 void DebugLog(const char* format, ...) {
@@ -176,7 +174,7 @@ float GetMicLevel() {
         hr = pEnumerator->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDevice);
         if (SUCCEEDED(hr) && pDevice) {
             IAudioMeterInformation* pMeter = NULL;
-            hr = pDevice->Activate(IID_IAudioMeterInformation, CLSCTX_ALL, NULL, (void**)&pMeter);
+            hr = pDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pMeter);
             if (SUCCEEDED(hr) && pMeter) {
                 hr = pMeter->GetPeakValue(&level);
                 pMeter->Release();
