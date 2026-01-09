@@ -69,6 +69,19 @@ void SaveSettings();
 void LoadSettings();
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    // Single instance check using a named mutex
+    HANDLE hMutex = CreateMutex(NULL, TRUE, "MicMuteS_SingleInstanceMutex");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        // Another instance is already running - find and activate its window
+        HWND hExisting = FindWindow("MicMuteS_Class", "MicMute-S");
+        if (hExisting) {
+            ShowWindow(hExisting, SW_RESTORE);
+            SetForegroundWindow(hExisting);
+        }
+        CloseHandle(hMutex);
+        return 0;
+    }
+
     InitializeAudio();
 
     // Create brushes
@@ -200,6 +213,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     DeleteObject(hFontSmall);
     DeleteObject(hFontOverlay);
     UninitializeAudio();
+    CloseHandle(hMutex);
     
     return (int)msg.wParam;
 }
