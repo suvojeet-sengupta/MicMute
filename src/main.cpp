@@ -52,9 +52,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     RegisterClassEx(&wc);
 
-    // Window size and position
-    int width = 380;
-    int height = 280;
+    // Window size and position - BIGGER
+    int width = 450;
+    int height = 350;
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
     int x = (screenW - width) / 2;
@@ -69,18 +69,28 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         NULL, NULL, hInstance, NULL
     );
 
-    // Create Fonts
-    hFontTitle = CreateFont(32, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
+    // Create Fonts - BIGGER
+    hFontTitle = CreateFont(42, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
-    hFontStatus = CreateFont(22, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
+    hFontStatus = CreateFont(26, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
-    hFontNormal = CreateFont(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
+    hFontNormal = CreateFont(17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
-    hFontSmall = CreateFont(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
+    hFontSmall = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
 
-    // Init startup checkbox state
+    // Check if startup is enabled, if not prompt user
     isRunOnStartup = IsStartupEnabled();
+    if (!isRunOnStartup) {
+        int result = MessageBox(hMainWnd, 
+            "Would you like MicMute-S to start automatically when Windows starts?\n\nThis is recommended for seamless microphone control.",
+            "Enable Startup?",
+            MB_YESNO | MB_ICONQUESTION);
+        if (result == IDYES) {
+            ManageStartup(true);
+            isRunOnStartup = true;
+        }
+    }
 
     AddTrayIcon(hMainWnd);
     UpdateUIState();
@@ -115,45 +125,45 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_CREATE: {
             HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
             
-            // App Title
+            // App Title (centered in 450 width)
             HWND hTitle = CreateWindow("STATIC", "MicMute-S", 
                 WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 25, 380, 40, hWnd, NULL, hInst, NULL);
+                0, 30, 450, 50, hWnd, NULL, hInst, NULL);
             SendMessage(hTitle, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
             // Status indicator
             HWND hStatus = CreateWindow("STATIC", "Checking...", 
                 WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 75, 380, 30, hWnd, (HMENU)ID_STATUS_LABEL, hInst, NULL);
+                0, 90, 450, 35, hWnd, (HMENU)ID_STATUS_LABEL, hInst, NULL);
             SendMessage(hStatus, WM_SETFONT, (WPARAM)hFontStatus, TRUE);
 
-            // Divider line simulation (using a thin static)
+            // Divider line
             CreateWindow("STATIC", "", 
                 WS_VISIBLE | WS_CHILD | SS_ETCHEDHORZ, 
-                40, 120, 300, 2, hWnd, NULL, hInst, NULL);
+                50, 145, 350, 2, hWnd, NULL, hInst, NULL);
 
             // Startup checkbox
             hStartupCheck = CreateWindow("BUTTON", "  Launch on Windows startup", 
                 WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 
-                60, 140, 260, 25, hWnd, (HMENU)ID_RUN_STARTUP, hInst, NULL);
+                90, 170, 280, 30, hWnd, (HMENU)ID_RUN_STARTUP, hInst, NULL);
             SendMessage(hStartupCheck, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
             SendMessage(hStartupCheck, BM_SETCHECK, isRunOnStartup ? BST_CHECKED : BST_UNCHECKED, 0);
 
             // Instructions
             HWND hInstr1 = CreateWindow("STATIC", "Click tray icon to toggle mute", 
                 WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 180, 380, 18, hWnd, NULL, hInst, NULL);
+                0, 220, 450, 20, hWnd, NULL, hInst, NULL);
             SendMessage(hInstr1, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
 
             HWND hInstr2 = CreateWindow("STATIC", "Right-click for menu  |  Minimize to hide", 
                 WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 198, 380, 18, hWnd, NULL, hInst, NULL);
+                0, 242, 450, 20, hWnd, NULL, hInst, NULL);
             SendMessage(hInstr2, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
 
             // Author
             HWND hAuthor = CreateWindow("STATIC", "by Suvojeet Sengupta", 
                 WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 225, 380, 18, hWnd, NULL, hInst, NULL);
+                0, 280, 450, 20, hWnd, NULL, hInst, NULL);
             SendMessage(hAuthor, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
             
             break;
