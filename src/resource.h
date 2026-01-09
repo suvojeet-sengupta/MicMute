@@ -11,6 +11,7 @@
 #define ID_FORCE_MUTE    1004
 #define ID_RUN_STARTUP   1005
 #define ID_STATUS_LABEL  1006
+#define ID_SHOW_OVERLAY  1007
 
 #define WM_TRAYICON (WM_USER + 1)
 

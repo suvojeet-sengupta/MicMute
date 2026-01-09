@@ -9,23 +9,35 @@
 // Global Variables
 NOTIFYICONDATA nid;
 HWND hMainWnd;
+HWND hOverlayWnd = NULL;
 bool isRunOnStartup = false;
+bool showOverlay = false;
 HFONT hFontTitle;
 HFONT hFontStatus;
 HFONT hFontNormal;
 HFONT hFontSmall;
+HFONT hFontOverlay;
 DWORD lastToggleTime = 0;
 int skipTimerCycles = 0;
 
 // Colors
 HBRUSH hBrushBg;
+HBRUSH hBrushOverlayMuted;
+HBRUSH hBrushOverlayLive;
 COLORREF colorBg = RGB(30, 30, 40);
 COLORREF colorText = RGB(220, 220, 230);
 COLORREF colorMuted = RGB(239, 68, 68);
 COLORREF colorLive = RGB(34, 197, 94);
+COLORREF colorOverlayBgMuted = RGB(180, 40, 40);
+COLORREF colorOverlayBgLive = RGB(30, 150, 60);
+
+// Overlay dragging
+bool isDragging = false;
+POINT dragStart;
 
 // Function Prototypes
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK OverlayWndProc(HWND, UINT, WPARAM, LPARAM);
 void AddTrayIcon(HWND hWnd);
 void RemoveTrayIcon();
 void UpdateTrayIcon(bool isMuted);
@@ -33,13 +45,22 @@ void ToggleMute();
 void UpdateUIState();
 void ManageStartup(bool enable);
 bool IsStartupEnabled();
+void CreateOverlayWindow(HINSTANCE hInstance);
+void UpdateOverlay();
+void SaveOverlayPosition();
+void LoadOverlayPosition(int* x, int* y);
+void SaveOverlayEnabled(bool enabled);
+bool LoadOverlayEnabled();
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     InitializeAudio();
 
-    // Create dark background brush
+    // Create brushes
     hBrushBg = CreateSolidBrush(colorBg);
+    hBrushOverlayMuted = CreateSolidBrush(colorOverlayBgMuted);
+    hBrushOverlayLive = CreateSolidBrush(colorOverlayBgLive);
 
+    // Register main window class
     WNDCLASSEX wc = {0};
     wc.cbSize = sizeof(WNDCLASSEX);
     wc.style = CS_HREDRAW | CS_VREDRAW;
@@ -49,27 +70,35 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.hbrBackground = hBrushBg;
     wc.lpszClassName = "MicMuteS_Class";
     wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
-
     RegisterClassEx(&wc);
 
-    // Window size and position - BIGGER
+    // Register overlay window class
+    WNDCLASSEX wcOverlay = {0};
+    wcOverlay.cbSize = sizeof(WNDCLASSEX);
+    wcOverlay.style = CS_HREDRAW | CS_VREDRAW;
+    wcOverlay.lpfnWndProc = OverlayWndProc;
+    wcOverlay.hInstance = hInstance;
+    wcOverlay.hCursor = LoadCursor(NULL, IDC_HAND);
+    wcOverlay.hbrBackground = hBrushOverlayLive;
+    wcOverlay.lpszClassName = "MicMuteS_Overlay";
+    RegisterClassEx(&wcOverlay);
+
+    // Window size and position
     int width = 450;
-    int height = 350;
+    int height = 380;
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
     int x = (screenW - width) / 2;
     int y = (screenH - height) / 2;
 
     hMainWnd = CreateWindowEx(
-        0,
-        "MicMuteS_Class", 
-        "MicMute-S",
+        0, "MicMuteS_Class", "MicMute-S",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         x, y, width, height, 
         NULL, NULL, hInstance, NULL
     );
 
-    // Create Fonts - BIGGER
+    // Create Fonts
     hFontTitle = CreateFont(42, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
     hFontStatus = CreateFont(26, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
@@ -78,24 +107,44 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
     hFontSmall = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
+    hFontOverlay = CreateFont(18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
 
-    // Check if startup is enabled, if not prompt user
+    // Check startup and overlay settings
     isRunOnStartup = IsStartupEnabled();
+    showOverlay = LoadOverlayEnabled();
+    
+    // First run dialog
     if (!isRunOnStartup) {
         int result = MessageBox(hMainWnd, 
-            "Would you like MicMute-S to start automatically when Windows starts?\n\nThis is recommended for seamless microphone control.",
+            "Would you like MicMute-S to start automatically with Windows?\n\nThis is recommended for seamless microphone control.",
             "Enable Startup?",
             MB_YESNO | MB_ICONQUESTION);
         if (result == IDYES) {
             ManageStartup(true);
             isRunOnStartup = true;
         }
+        
+        // Also ask about overlay
+        result = MessageBox(hMainWnd,
+            "Would you like to show a floating mute button on screen?\n\nThis small draggable button stays visible for quick mute/unmute access.",
+            "Enable Floating Button?",
+            MB_YESNO | MB_ICONQUESTION);
+        if (result == IDYES) {
+            showOverlay = true;
+            SaveOverlayEnabled(true);
+        }
+    }
+
+    // Create overlay if enabled
+    if (showOverlay) {
+        CreateOverlayWindow(hInstance);
     }
 
     AddTrayIcon(hMainWnd);
     UpdateUIState();
 
-    // Timer for UI updates (every 2 seconds)
+    // Timer for UI updates
     SetTimer(hMainWnd, 1, 2000, NULL);
 
     ShowWindow(hMainWnd, nCmdShow);
@@ -109,61 +158,243 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // Cleanup
     DeleteObject(hBrushBg);
+    DeleteObject(hBrushOverlayMuted);
+    DeleteObject(hBrushOverlayLive);
     DeleteObject(hFontTitle);
     DeleteObject(hFontStatus);
     DeleteObject(hFontNormal);
     DeleteObject(hFontSmall);
+    DeleteObject(hFontOverlay);
     UninitializeAudio();
     
     return (int)msg.wParam;
 }
 
+void CreateOverlayWindow(HINSTANCE hInstance) {
+    int overlayX, overlayY;
+    LoadOverlayPosition(&overlayX, &overlayY);
+    
+    // Create topmost, borderless overlay window
+    hOverlayWnd = CreateWindowEx(
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+        "MicMuteS_Overlay",
+        NULL,
+        WS_POPUP,
+        overlayX, overlayY, 100, 40,
+        NULL, NULL, hInstance, NULL
+    );
+    
+    if (hOverlayWnd) {
+        ShowWindow(hOverlayWnd, SW_SHOW);
+        UpdateOverlay();
+    }
+}
+
+LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hWnd, &ps);
+            
+            RECT rect;
+            GetClientRect(hWnd, &rect);
+            
+            bool muted = IsDefaultMicMuted();
+            
+            // Fill background with color based on state
+            HBRUSH brush = muted ? hBrushOverlayMuted : hBrushOverlayLive;
+            FillRect(hdc, &rect, brush);
+            
+            // Draw rounded border
+            HPEN pen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
+            HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+            HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+            RoundRect(hdc, 0, 0, rect.right, rect.bottom, 10, 10);
+            SelectObject(hdc, oldPen);
+            SelectObject(hdc, oldBrush);
+            DeleteObject(pen);
+            
+            // Draw text
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(255, 255, 255));
+            SelectObject(hdc, hFontOverlay);
+            
+            const char* text = muted ? "MUTED" : "LIVE";
+            DrawText(hdc, text, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            
+            EndPaint(hWnd, &ps);
+            return 0;
+        }
+        
+        case WM_LBUTTONDOWN: {
+            // Start dragging
+            isDragging = true;
+            SetCapture(hWnd);
+            GetCursorPos(&dragStart);
+            RECT rect;
+            GetWindowRect(hWnd, &rect);
+            dragStart.x -= rect.left;
+            dragStart.y -= rect.top;
+            return 0;
+        }
+        
+        case WM_MOUSEMOVE: {
+            if (isDragging) {
+                POINT pt;
+                GetCursorPos(&pt);
+                SetWindowPos(hWnd, NULL, pt.x - dragStart.x, pt.y - dragStart.y, 0, 0, 
+                    SWP_NOSIZE | SWP_NOZORDER);
+            }
+            return 0;
+        }
+        
+        case WM_LBUTTONUP: {
+            if (isDragging) {
+                isDragging = false;
+                ReleaseCapture();
+                SaveOverlayPosition();
+                
+                // Check if it was a click (not a drag)
+                POINT pt;
+                GetCursorPos(&pt);
+                RECT rect;
+                GetWindowRect(hWnd, &rect);
+                int dx = abs((pt.x - rect.left) - dragStart.x);
+                int dy = abs((pt.y - rect.top) - dragStart.y);
+                
+                // If moved less than 5 pixels, treat as click
+                if (dx < 5 && dy < 5) {
+                    ToggleMute();
+                }
+            }
+            return 0;
+        }
+        
+        case WM_RBUTTONUP: {
+            // Right-click to hide overlay
+            showOverlay = false;
+            SaveOverlayEnabled(false);
+            ShowWindow(hWnd, SW_HIDE);
+            return 0;
+        }
+        
+        default:
+            return DefWindowProc(hWnd, msg, wParam, lParam);
+    }
+}
+
+void UpdateOverlay() {
+    if (hOverlayWnd && IsWindowVisible(hOverlayWnd)) {
+        InvalidateRect(hOverlayWnd, NULL, TRUE);
+    }
+}
+
+void SaveOverlayPosition() {
+    if (!hOverlayWnd) return;
+    
+    RECT rect;
+    GetWindowRect(hOverlayWnd, &rect);
+    
+    HKEY hKey;
+    if (RegCreateKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+        RegSetValueEx(hKey, "OverlayX", 0, REG_DWORD, (BYTE*)&rect.left, sizeof(DWORD));
+        RegSetValueEx(hKey, "OverlayY", 0, REG_DWORD, (BYTE*)&rect.top, sizeof(DWORD));
+        RegCloseKey(hKey);
+    }
+}
+
+void LoadOverlayPosition(int* x, int* y) {
+    *x = 50;  // Default position
+    *y = 50;
+    
+    HKEY hKey;
+    if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+        DWORD size = sizeof(DWORD);
+        RegQueryValueEx(hKey, "OverlayX", NULL, NULL, (BYTE*)x, &size);
+        RegQueryValueEx(hKey, "OverlayY", NULL, NULL, (BYTE*)y, &size);
+        RegCloseKey(hKey);
+    }
+}
+
+void SaveOverlayEnabled(bool enabled) {
+    HKEY hKey;
+    if (RegCreateKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+        DWORD value = enabled ? 1 : 0;
+        RegSetValueEx(hKey, "OverlayEnabled", 0, REG_DWORD, (BYTE*)&value, sizeof(DWORD));
+        RegCloseKey(hKey);
+    }
+}
+
+bool LoadOverlayEnabled() {
+    HKEY hKey;
+    DWORD value = 0;
+    if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+        DWORD size = sizeof(DWORD);
+        RegQueryValueEx(hKey, "OverlayEnabled", NULL, NULL, (BYTE*)&value, &size);
+        RegCloseKey(hKey);
+    }
+    return value != 0;
+}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     static HWND hStartupCheck;
+    static HWND hOverlayCheck;
 
     switch (msg) {
         case WM_CREATE: {
             HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
             
-            // App Title (centered in 450 width)
+            // App Title
             HWND hTitle = CreateWindow("STATIC", "MicMute-S", 
                 WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 30, 450, 50, hWnd, NULL, hInst, NULL);
+                0, 25, 450, 50, hWnd, NULL, hInst, NULL);
             SendMessage(hTitle, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
             // Status indicator
             HWND hStatus = CreateWindow("STATIC", "Checking...", 
                 WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 90, 450, 35, hWnd, (HMENU)ID_STATUS_LABEL, hInst, NULL);
+                0, 80, 450, 35, hWnd, (HMENU)ID_STATUS_LABEL, hInst, NULL);
             SendMessage(hStatus, WM_SETFONT, (WPARAM)hFontStatus, TRUE);
 
             // Divider line
             CreateWindow("STATIC", "", 
                 WS_VISIBLE | WS_CHILD | SS_ETCHEDHORZ, 
-                50, 145, 350, 2, hWnd, NULL, hInst, NULL);
+                50, 130, 350, 2, hWnd, NULL, hInst, NULL);
 
             // Startup checkbox
             hStartupCheck = CreateWindow("BUTTON", "  Launch on Windows startup", 
                 WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 
-                90, 170, 280, 30, hWnd, (HMENU)ID_RUN_STARTUP, hInst, NULL);
+                80, 150, 300, 28, hWnd, (HMENU)ID_RUN_STARTUP, hInst, NULL);
             SendMessage(hStartupCheck, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
             SendMessage(hStartupCheck, BM_SETCHECK, isRunOnStartup ? BST_CHECKED : BST_UNCHECKED, 0);
 
+            // Overlay checkbox
+            hOverlayCheck = CreateWindow("BUTTON", "  Show floating mute button", 
+                WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 
+                80, 185, 300, 28, hWnd, (HMENU)ID_SHOW_OVERLAY, hInst, NULL);
+            SendMessage(hOverlayCheck, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
+            SendMessage(hOverlayCheck, BM_SETCHECK, showOverlay ? BST_CHECKED : BST_UNCHECKED, 0);
+
             // Instructions
-            HWND hInstr1 = CreateWindow("STATIC", "Click tray icon to toggle mute", 
+            HWND hInstr1 = CreateWindow("STATIC", "Click tray icon or floating button to toggle", 
                 WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 220, 450, 20, hWnd, NULL, hInst, NULL);
+                0, 235, 450, 20, hWnd, NULL, hInst, NULL);
             SendMessage(hInstr1, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
 
-            HWND hInstr2 = CreateWindow("STATIC", "Right-click for menu  |  Minimize to hide", 
+            HWND hInstr2 = CreateWindow("STATIC", "Drag floating button to move  |  Right-click to hide", 
                 WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 242, 450, 20, hWnd, NULL, hInst, NULL);
+                0, 255, 450, 20, hWnd, NULL, hInst, NULL);
             SendMessage(hInstr2, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
+
+            HWND hInstr3 = CreateWindow("STATIC", "Minimize to hide  |  Right-click tray for menu", 
+                WS_VISIBLE | WS_CHILD | SS_CENTER, 
+                0, 275, 450, 20, hWnd, NULL, hInst, NULL);
+            SendMessage(hInstr3, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
 
             // Author
             HWND hAuthor = CreateWindow("STATIC", "by Suvojeet Sengupta", 
                 WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 280, 450, 20, hWnd, NULL, hInst, NULL);
+                0, 310, 450, 20, hWnd, NULL, hInst, NULL);
             SendMessage(hAuthor, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
             
             break;
@@ -175,7 +406,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             
             SetBkColor(hdcStatic, colorBg);
             
-            // Check if this is the status label
             if (GetDlgCtrlID(hCtrl) == ID_STATUS_LABEL) {
                 bool muted = IsDefaultMicMuted();
                 SetTextColor(hdcStatic, muted ? colorMuted : colorLive);
@@ -192,11 +422,29 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 isRunOnStartup = (SendMessage(hStartupCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 ManageStartup(isRunOnStartup);
             }
+            else if (wmId == ID_SHOW_OVERLAY) {
+                showOverlay = (SendMessage(hOverlayCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                SaveOverlayEnabled(showOverlay);
+                
+                if (showOverlay) {
+                    if (!hOverlayWnd) {
+                        CreateOverlayWindow(GetModuleHandle(NULL));
+                    } else {
+                        ShowWindow(hOverlayWnd, SW_SHOW);
+                    }
+                    UpdateOverlay();
+                } else if (hOverlayWnd) {
+                    ShowWindow(hOverlayWnd, SW_HIDE);
+                }
+            }
             else if (wmId == ID_TRAY_OPEN) {
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
             }
             else if (wmId == ID_TRAY_EXIT) {
+                if (hOverlayWnd) {
+                    DestroyWindow(hOverlayWnd);
+                }
                 DestroyWindow(hWnd);
             }
             break;
@@ -260,11 +508,11 @@ void ToggleMute() {
 void UpdateUIState() {
     bool muted = IsDefaultMicMuted();
     UpdateTrayIcon(muted);
+    UpdateOverlay();
 
     HWND hStatus = GetDlgItem(hMainWnd, ID_STATUS_LABEL);
     if (hStatus) {
-        SetWindowText(hStatus, muted ? "🔇  MICROPHONE MUTED" : "🎤  MICROPHONE LIVE");
-        // Force redraw to update color
+        SetWindowText(hStatus, muted ? "MICROPHONE MUTED" : "MICROPHONE LIVE");
         InvalidateRect(hStatus, NULL, TRUE);
     }
 }
