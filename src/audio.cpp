@@ -158,3 +158,28 @@ bool ToggleMuteAll() {
 bool IsAnyMicMuted() {
     return isMutedByVolume || IsDefaultMicMuted();
 }
+
+// Get microphone audio level (0.0 to 1.0)
+float GetMicLevel() {
+    float level = 0.0f;
+    IMMDeviceEnumerator* pEnumerator = NULL;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, 
+        __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+    
+    if (SUCCEEDED(hr)) {
+        IMMDevice* pDevice = NULL;
+        pEnumerator->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDevice);
+        if (pDevice) {
+            IAudioMeterInformation* pMeter = NULL;
+            hr = pDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pMeter);
+            if (SUCCEEDED(hr) && pMeter) {
+                pMeter->GetPeakValue(&level);
+                pMeter->Release();
+            }
+            pDevice->Release();
+        }
+        pEnumerator->Release();
+    }
+    return level;
+}
+

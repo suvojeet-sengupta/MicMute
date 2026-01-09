@@ -12,6 +12,7 @@
 #define ID_RUN_STARTUP   1005
 #define ID_STATUS_LABEL  1006
 #define ID_SHOW_OVERLAY  1007
+#define ID_SHOW_METER    1008
 
 #define WM_TRAYICON (WM_USER + 1)
 
