@@ -168,25 +168,47 @@ LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             int centerY = rect.bottom / 2;
             
             bool muted = IsDefaultMicMuted();
-            HBRUSH barBrush = CreateSolidBrush(muted ? RGB(100, 100, 100) : colorLive);
+
             
             for (int i = 0; i < LEVEL_HISTORY_SIZE; i++) {
                 int idx = (levelHistoryIndex - LEVEL_HISTORY_SIZE + i + LEVEL_HISTORY_SIZE) % LEVEL_HISTORY_SIZE;
                 float level = levelHistory[idx];
-                if (muted) level = 0;
                 
-                int barHeight = (int)(level * maxHeight);
+                // Visual boost: Use square root to make low volume more visible (log-like behavior)
+                // A signal of 0.1 (common speech) becomes 0.31, making it clearly visible
+                float displayLevel = (level > 0.0f) ? sqrt(level) : 0.0f;
+                
+                if (muted) displayLevel = 0;
+                
+                int barHeight = (int)(displayLevel * maxHeight);
                 if (barHeight < 2) barHeight = 2;
                 
+                // Dynamic coloring logic
+                COLORREF barColor;
+                if (muted) {
+                    barColor = RGB(60, 60, 60); // Dark Gray
+                } else {
+                    if (displayLevel > 0.90f) {
+                        barColor = RGB(255, 50, 50);   // Red (Clipping)
+                    } else if (displayLevel > 0.65f) {
+                        barColor = RGB(255, 200, 0);   // Yellow (Loud)
+                    } else {
+                        barColor = colorLive;          // standard color (likely Green/Blue)
+                    }
+                }
+                
+                HBRUSH currentBarBrush = CreateSolidBrush(barColor);
+
                 RECT barRect;
                 barRect.left = startX + i * (barWidth + gap);
                 barRect.right = barRect.left + barWidth;
                 barRect.top = centerY - barHeight / 2;
                 barRect.bottom = centerY + barHeight / 2;
                 
-                FillRect(hdc, &barRect, barBrush);
+                FillRect(hdc, &barRect, currentBarBrush);
+                DeleteObject(currentBarBrush);
             }
-            DeleteObject(barBrush);
+            // Removed redundant DeleteObject(barBrush) since we create/delete inside loop now
             
             EndPaint(hWnd, &ps);
             return 0;
