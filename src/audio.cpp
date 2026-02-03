@@ -3,186 +3,327 @@
 #include <windows.h>
 #include <stdio.h>
 #include <map>
-#include <Audioclient.h>
-#include <audiopolicy.h>
+#include <string>
+#include <vector>
+#include <thread>
+#include <atomic>
+#include <mutex>
 
+// Link against required libs
+#pragma comment(lib, "ole32.lib")
 
-// Debug logging helper
-void DebugLog(const char* format, ...) {
-    char buffer[512];
-    va_list args;
-    va_start(args, format);
-    vsprintf_s(buffer, format, args);
-    va_end(args);
-    OutputDebugStringA(buffer);
-    OutputDebugStringA("\n");
+// ==========================================
+// Utils: Safe COM Pointer
+// ==========================================
+template <class T>
+class SafeComPtr {
+public:
+    T* ptr;
+    SafeComPtr() : ptr(NULL) {}
+    SafeComPtr(T* p) : ptr(p) { if(ptr) ptr->AddRef(); }
+    ~SafeComPtr() { Release(); }
+    
+    void Release() {
+        if (ptr) {
+            ptr->Release();
+            ptr = NULL;
+        }
+    }
+    
+    T** operator&() { Release(); return &ptr; }
+    T* operator->() { return ptr; }
+    operator bool() { return ptr != NULL; }
+    bool operator!() { return ptr == NULL; }
+};
+
+// ==========================================
+// Utils: Registry Helpers
+// ==========================================
+static const char* REG_PATH_VOLUMES = "Software\\MicMute-S\\DeviceVolumes";
+
+void RegWriteVolume(const std::wstring& deviceId, float volume) {
+    HKEY hKey;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\MicMute-S\\DeviceVolumes", 0, NULL, 
+        REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
+        RegSetValueExW(hKey, deviceId.c_str(), 0, REG_DWORD, (const BYTE*)&volume, sizeof(float));
+        RegCloseKey(hKey);
+    }
 }
 
-// Store original volumes to restore later
-static std::map<UINT, float> originalVolumes;
-static bool isMutedByVolume = false;
+float RegReadVolume(const std::wstring& deviceId) {
+    HKEY hKey;
+    float volume = -1.0f; // Indicator for "not found"
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\MicMute-S\\DeviceVolumes", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        DWORD size = sizeof(float);
+        DWORD type = REG_DWORD;
+        RegQueryValueExW(hKey, deviceId.c_str(), NULL, &type, (BYTE*)&volume, &size);
+        RegCloseKey(hKey);
+    }
+    return volume;
+}
+
+// ==========================================
+// AudioManager Class
+// ==========================================
+class AudioManager {
+private:
+    SafeComPtr<IMMDeviceEnumerator> pEnumerator;
+    SafeComPtr<IMMDevice> pDefaultDevice;
+    SafeComPtr<IAudioMeterInformation> pMeterInfo;
+    
+    std::atomic<float> currentPeakLevel;
+    std::atomic<bool> isMutedGlobal;
+    std::mutex deviceMutex;
+    
+    std::thread pollerThread;
+    std::atomic<bool> stopThread;
+
+    void InitializeCOM() {
+        if (!pEnumerator) {
+            CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, 
+                __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+        }
+    }
+
+    // Returns true if successful
+    bool UpdateDefaultDevice() {
+        std::lock_guard<std::mutex> lock(deviceMutex);
+        InitializeCOM();
+        if (!pEnumerator) return false;
+
+        // Try to get default device
+        SafeComPtr<IMMDevice> pNewDevice;
+        HRESULT hr = pEnumerator->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pNewDevice);
+        
+        if (FAILED(hr)) {
+            // Device might be lost
+            pDefaultDevice.Release();
+            pMeterInfo.Release();
+            return false;
+        }
+
+        // Check if device changed (simple check: if we didn't have one before)
+        // ideally we check ID, but for now just ensure we have a valid pDevice
+        if (!pDefaultDevice) {
+            pDefaultDevice = pNewDevice.ptr;
+            pDefaultDevice.ptr->AddRef(); // Manually AddRef since we copied pointer
+        }
+        
+        // Refresh Meter Info if needed
+        if (pDefaultDevice && !pMeterInfo) {
+            pDefaultDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pMeterInfo);
+        }
+
+        return (pDefaultDevice && pMeterInfo);
+    }
+
+    void PollerLoop() {
+        CoInitialize(NULL);
+        while (!stopThread) {
+            if (UpdateDefaultDevice()) {
+                float peak = 0.0f;
+                // Thread-safe lock not strictly needed for just calling GetPeakValue 
+                // on a localized COM interface, but good practice if we swap pMeterInfo
+                std::lock_guard<std::mutex> lock(deviceMutex);
+                if (pMeterInfo) {
+                    pMeterInfo->GetPeakValue(&peak);
+                }
+                currentPeakLevel = peak;
+            } else {
+                currentPeakLevel = 0.0f;
+            }
+            Sleep(50); // Poll every 50ms
+        }
+        
+        // Cleanup thread-local COM
+        {
+            std::lock_guard<std::mutex> lock(deviceMutex);
+            pMeterInfo.Release();
+            pDefaultDevice.Release();
+            pEnumerator.Release();
+        }
+        CoUninitialize();
+    }
+
+public:
+    AudioManager() : currentPeakLevel(0.0f), isMutedGlobal(false), stopThread(false) {}
+
+    void Start() {
+        stopThread = false;
+        pollerThread = std::thread(&AudioManager::PollerLoop, this);
+    }
+
+    void Stop() {
+        stopThread = true;
+        if (pollerThread.joinable()) {
+            pollerThread.join();
+        }
+    }
+
+    float GetCurrentLevel() {
+        return currentPeakLevel;
+    }
+
+    bool GetMuteState() {
+        // We trust our internal state first, but verifying with hardware is good occasionally
+        // For high freq calls, return internal state
+        return isMutedGlobal;
+    }
+    
+    // Mute/Unmute Logic with persistence
+    // Returns new mute state
+    bool SetMute(bool mute) {
+        // This runs on MAIN THREAD usually (triggered by user action)
+        // So we need to init COM on this thread if not already
+        // But we shouldn't share COM objects across threads without marshalling.
+        // EASIEST: Just create a temporary enumerator here. 
+        // Logic changes infrequently, so creation overhead is acceptable here (unlike GetMicLevel).
+        
+        HRESULT hr;
+        IMMDeviceEnumerator* pEnum = NULL;
+        hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, 
+            __uuidof(IMMDeviceEnumerator), (void**)&pEnum);
+            
+        if (FAILED(hr)) return isMutedGlobal;
+
+        IMMDeviceCollection* pCollection = NULL;
+        pEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
+        
+        if (pCollection) {
+            UINT count = 0;
+            pCollection->GetCount(&count);
+            
+            for (UINT i = 0; i < count; i++) {
+                IMMDevice* pDevice = NULL;
+                pCollection->Item(i, &pDevice);
+                if (pDevice) {
+                    LPWSTR wstrId = NULL;
+                    pDevice->GetId(&wstrId);
+                    std::wstring deviceId = wstrId ? wstrId : L"Unknown";
+                    if (wstrId) CoTaskMemFree(wstrId);
+
+                    IAudioEndpointVolume* pVolume = NULL;
+                    pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pVolume);
+                    
+                    if (pVolume) {
+                        if (mute) {
+                            // MUTE OPERATION
+                            float currentVol = 0.0f;
+                            pVolume->GetMasterVolumeLevelScalar(&currentVol);
+                            
+                            // Save if > 0
+                            if (currentVol > 0.01f) {
+                                RegWriteVolume(deviceId, currentVol);
+                            }
+                            
+                            // Mute using Volume 0 AND Native Mute
+                            pVolume->SetMasterVolumeLevelScalar(0.0f, NULL);
+                            pVolume->SetMute(TRUE, NULL);
+                            
+                        } else {
+                            // UNMUTE OPERATION
+                            float savedVol = RegReadVolume(deviceId);
+                            
+                            // Safety clamp: if not found or weird, default to 50%
+                            if (savedVol < 0.0f || savedVol > 1.0f) savedVol = 0.5f;
+                            
+                            // Set Volume
+                            pVolume->SetMasterVolumeLevelScalar(savedVol, NULL);
+                            pVolume->SetMute(FALSE, NULL);
+                        }
+                        pVolume->Release();
+                    }
+                    pDevice->Release();
+                }
+            }
+            pCollection->Release();
+        }
+        
+        if (pEnum) pEnum->Release();
+        
+        isMutedGlobal = mute;
+        return mute;
+    }
+
+    bool CheckIfMuted() {
+         // Check actual hardware state of default device
+        HRESULT hr;
+        IMMDeviceEnumerator* pEnum = NULL;
+        hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, 
+            __uuidof(IMMDeviceEnumerator), (void**)&pEnum);
+            
+        bool result = false;
+        if (SUCCEEDED(hr)) {
+            IMMDevice* pDevice = NULL;
+            pEnum->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDevice);
+            if (pDevice) {
+                IAudioEndpointVolume* pVol = NULL;
+                pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pVol);
+                if (pVol) {
+                    BOOL bMute;
+                    float fVol;
+                    pVol->GetMute(&bMute);
+                    pVol->GetMasterVolumeLevelScalar(&fVol);
+                    // Muted if switch is on OR volume is zero
+                    result = (bMute == TRUE) || (fVol < 0.01f);
+                    pVol->Release();
+                }
+                pDevice->Release();
+            }
+            pEnum->Release();
+        }
+        
+        // Sync global state
+        isMutedGlobal = result;
+        return result;
+    }
+};
+
+// ==========================================
+// Global Wrapper Functions
+// ==========================================
+// Singleton instance
+static AudioManager* g_Audio = NULL;
 
 void InitializeAudio() {
-    CoInitialize(NULL);
-    DebugLog("Audio initialized");
+    if (!g_Audio) {
+        g_Audio = new AudioManager();
+        g_Audio->Start();
+        // Initial state check
+        g_Audio->CheckIfMuted();
+    }
 }
 
 void UninitializeAudio() {
-    CoUninitialize();
-}
-
-// NEW APPROACH: Set volume to 0 instead of using SetMute
-// This bypasses software that monitors only the mute state
-void ApplyVolumeToCollection(IMMDeviceCollection* pCollection, bool mute) {
-    UINT count = 0;
-    pCollection->GetCount(&count);
-    DebugLog("ApplyVolumeToCollection: Found %d devices, mute=%d", count, mute);
-
-    for (UINT i = 0; i < count; i++) {
-        IMMDevice* pDevice = NULL;
-        pCollection->Item(i, &pDevice);
-        if (pDevice) {
-            IAudioEndpointVolume* pEndpointVolume = NULL;
-            pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pEndpointVolume);
-            if (pEndpointVolume) {
-                if (mute) {
-                    // Save current volume and set to 0
-                    float currentVolume = 0.0f;
-                    pEndpointVolume->GetMasterVolumeLevelScalar(&currentVolume);
-                    
-                    // Only save if not already 0 (to preserve original volume)
-                    if (currentVolume > 0.01f) {
-                        originalVolumes[i] = currentVolume;
-                        DebugLog("  Device %d: Saved original volume %.2f", i, currentVolume);
-                    }
-                    
-                    // Set volume to 0
-                    HRESULT hr = pEndpointVolume->SetMasterVolumeLevelScalar(0.0f, NULL);
-                    DebugLog("  Device %d: SetVolume(0) returned hr=0x%08X", i, hr);
-                    
-                    // Also try SetMute as backup
-                    pEndpointVolume->SetMute(TRUE, NULL);
-                } else {
-                    // Restore original volume
-                    float restoreVolume = 1.0f;  // Default to full if we don't have saved
-                    if (originalVolumes.find(i) != originalVolumes.end()) {
-                        restoreVolume = originalVolumes[i];
-                    }
-                    
-                    HRESULT hr = pEndpointVolume->SetMasterVolumeLevelScalar(restoreVolume, NULL);
-                    DebugLog("  Device %d: SetVolume(%.2f) returned hr=0x%08X", i, restoreVolume, hr);
-                    
-                    // Also unmute
-                    pEndpointVolume->SetMute(FALSE, NULL);
-                }
-                
-                // Verify
-                Sleep(50);
-                float newVolume = 0.0f;
-                pEndpointVolume->GetMasterVolumeLevelScalar(&newVolume);
-                DebugLog("  Device %d: After set, actual volume = %.2f", i, newVolume);
-                
-                pEndpointVolume->Release();
-            }
-            pDevice->Release();
-        }
+    if (g_Audio) {
+        g_Audio->Stop();
+        delete g_Audio;
+        g_Audio = NULL;
     }
 }
 
-// Set Mute for ALL Capture devices using volume approach
-void SetMuteAll(bool mute) {
-    DebugLog("SetMuteAll called with mute=%d (using volume approach)", mute);
-    IMMDeviceEnumerator* pEnumerator = NULL;
-    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
-    
-    if (SUCCEEDED(hr)) {
-        IMMDeviceCollection* pCollection = NULL;
-        pEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
-        if (pCollection) {
-            ApplyVolumeToCollection(pCollection, mute);
-            pCollection->Release();
-        }
-        pEnumerator->Release();
-        isMutedByVolume = mute;
-    } else {
-        DebugLog("SetMuteAll: Failed to create device enumerator, hr=0x%08X", hr);
-    }
-}
-
-// Check if mic is muted (by volume = 0 OR actual mute)
-bool IsDefaultMicMuted() {
-    bool isMuted = false;
-    IMMDeviceEnumerator* pEnumerator = NULL;
-    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
-    
-    if (SUCCEEDED(hr)) {
-        IMMDevice* pDevice = NULL;
-        pEnumerator->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDevice);
-        if (pDevice) {
-            IAudioEndpointVolume* pEndpointVolume = NULL;
-            pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pEndpointVolume);
-            if (pEndpointVolume) {
-                // Check both mute state AND volume level
-                BOOL muted = FALSE;
-                pEndpointVolume->GetMute(&muted);
-                
-                float volume = 1.0f;
-                pEndpointVolume->GetMasterVolumeLevelScalar(&volume);
-                
-                // Consider muted if: actual mute OR volume near zero OR we set it
-                isMuted = muted || (volume < 0.01f) || isMutedByVolume;
-                
-                DebugLog("IsDefaultMicMuted: mute=%d, volume=%.2f, isMutedByVolume=%d, returning %d", 
-                         muted, volume, isMutedByVolume, isMuted);
-                
-                pEndpointVolume->Release();
-            }
-            pDevice->Release();
-        }
-        pEnumerator->Release();
-    }
-    return isMuted;
-}
-
-// Toggles mute state
 bool ToggleMuteAll() {
-    DebugLog("=== ToggleMuteAll START ===");
-    
-    // Use our internal state instead of checking actual mute
-    bool newMute = !isMutedByVolume;
-    DebugLog("ToggleMuteAll: isMutedByVolume=%d, will set to newMute=%d", isMutedByVolume, newMute);
-    
-    SetMuteAll(newMute);
-    
-    DebugLog("=== ToggleMuteAll END ===");
-    return newMute;
+    if (!g_Audio) return false;
+    bool current = g_Audio->GetMuteState();
+    return g_Audio->SetMute(!current);
+}
+
+void SetMuteAll(bool mute) {
+    if (g_Audio) g_Audio->SetMute(mute);
 }
 
 bool IsAnyMicMuted() {
-    return isMutedByVolume || IsDefaultMicMuted();
+    if (g_Audio) return g_Audio->GetMuteState();
+    return false;
 }
 
-// Get microphone audio level (0.0 to 1.0)
+bool IsDefaultMicMuted() {
+    // If we want real-time hardware check:
+    if (g_Audio) return g_Audio->CheckIfMuted();
+    return false;
+}
+
 float GetMicLevel() {
-    float level = 0.0f;
-    IMMDeviceEnumerator* pEnumerator = NULL;
-    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, 
-        __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
-    
-    if (SUCCEEDED(hr) && pEnumerator) {
-        IMMDevice* pDevice = NULL;
-        hr = pEnumerator->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDevice);
-        if (SUCCEEDED(hr) && pDevice) {
-            IAudioMeterInformation* pMeter = NULL;
-            hr = pDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pMeter);
-            if (SUCCEEDED(hr) && pMeter) {
-                hr = pMeter->GetPeakValue(&level);
-                pMeter->Release();
-            }
-            pDevice->Release();
-        }
-        pEnumerator->Release();
-    }
-    return level;
+    if (g_Audio) return g_Audio->GetCurrentLevel();
+    return 0.0f;
 }
-
