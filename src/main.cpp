@@ -44,6 +44,13 @@ void UpdateTabVisibility(int tabIndex) {
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    // Initialize COM for WASAPI
+    HRESULT hr = CoInitialize(NULL);
+    if (FAILED(hr)) {
+        MessageBox(NULL, "Failed to initialize COM infrastructure.", "Fatal Error", MB_ICONERROR);
+        return 0;
+    }
+
     // Single instance check using a named mutex
     HANDLE hMutex = CreateMutex(NULL, TRUE, "MicMuteS_SingleInstanceMutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -54,6 +61,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             SetForegroundWindow(hExisting);
         }
         CloseHandle(hMutex);
+        CoUninitialize();
         return 0;
     }
 
@@ -131,6 +139,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         x, y, width, height, 
         NULL, NULL, hInstance, NULL
     );
+    
+    if (!hMainWnd) {
+        MessageBox(NULL, "Failed to create main application window.", "Fatal Error", MB_ICONERROR);
+        CoUninitialize();
+        return 0;
+    }
 
     // Apply rounded corners (Windows 11+)
     DWM_WINDOW_CORNER_PREFERENCE cornerPref = DWMWCP_ROUND;
