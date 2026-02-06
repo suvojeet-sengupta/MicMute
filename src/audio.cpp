@@ -132,7 +132,7 @@ private:
             } else {
                 currentPeakLevel = 0.0f;
             }
-            Sleep(50); // Poll every 50ms
+            Sleep(16); // Poll every ~16ms (60fps)
         }
         
         // Cleanup thread-local COM

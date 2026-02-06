@@ -160,55 +160,85 @@ LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             RoundRect(hdc, 0, 0, rect.right, rect.bottom, 8, 8);
             DeleteObject(borderPen);
             
-            // Draw waveform bars
-            int barWidth = 4;
-            int gap = 2;
-            int startX = 10;
-            int maxHeight = rect.bottom - 16;
-            int centerY = rect.bottom / 2;
+            int centerY = (rect.bottom - rect.top) / 2;
+            int availHeight = rect.bottom - rect.top - 4; // padding
+            int maxHalfHeight = availHeight / 2;
             
             bool muted = IsDefaultMicMuted();
-
+            int numSamples = LEVEL_HISTORY_SIZE;
             
-            for (int i = 0; i < LEVEL_HISTORY_SIZE; i++) {
-                int idx = (levelHistoryIndex - LEVEL_HISTORY_SIZE + i + LEVEL_HISTORY_SIZE) % LEVEL_HISTORY_SIZE;
-                float level = levelHistory[idx];
+            // Draw waveform
+            // We draw vertical lines for each history sample
+            // Spacing depends on window width and history size.
+            // For smoother look, we might draw fewer lines if window is small, 
+            // but here we just map 1:1 or similarly.
+            
+            float stepX = (float)(rect.right - rect.left - 16) / (float)(numSamples - 1);
+            int startX = 8;
+
+            for (int i = 0; i < numSamples; i++) {
+                // Get oldest to newest? Or newest to oldest?
+                // Usually newest is at right.
+                // Circular buffer logic:
+                int idx = (levelHistoryIndex - 1 - i + numSamples) % numSamples; // Newest is at index 0 (visual right)
+                // Actually let's draw Left=Oldest, Right=Newest
+                // Oldest is at (levelHistoryIndex)
+                int bufferIdx = (levelHistoryIndex + i) % numSamples;
                 
-                // Visual boost: Use square root to make low volume more visible (log-like behavior)
-                // A signal of 0.1 (common speech) becomes 0.31, making it clearly visible
-                float displayLevel = (level > 0.0f) ? sqrt(level) : 0.0f;
+                float rawLevel = levelHistory[bufferIdx];
                 
-                if (muted) displayLevel = 0;
+                // Logarithmic Scaling (dB)
+                // Range: -60dB -> 0dB mapped to 0.0 -> 1.0
+                float displayLevel = 0.0f;
+                if (rawLevel > 0.000001f) { // Avoid log(0)
+                    float db = 20.0f * log10f(rawLevel);
+                    // Map -60 to 0 -> 0 to 1
+                    // db = -60 => 0
+                    // db = 0 => 1
+                     displayLevel = (db + 60.0f) / 60.0f;
+                }
+                if (displayLevel < 0.0f) displayLevel = 0.0f;
+                if (displayLevel > 1.0f) displayLevel = 1.0f;
                 
-                int barHeight = (int)(displayLevel * maxHeight);
-                if (barHeight < 2) barHeight = 2;
-                
-                // Dynamic coloring logic
-                COLORREF barColor;
-                if (muted) {
-                    barColor = RGB(60, 60, 60); // Dark Gray
+                if (muted) displayLevel = 0.0f;
+
+                // Calculate Bar Height
+                int halfHeight = (int)(displayLevel * maxHalfHeight);
+                if (halfHeight < 1) halfHeight = 1; // Minimum visualization (center line)
+
+                // Color Logic (Gradient)
+                // Low(0.0) -> Green, Mid(0.7) -> Yellow, Hi(1.0) -> Red
+                int r = 0, g = 255, b = 0;
+                if (displayLevel < 0.5f) {
+                    // Green to Yellow
+                    // 0.0: 0,255,0
+                    // 0.5: 255,255,0
+                    r = (int)(displayLevel * 2.0f * 255.0f);
+                    g = 255;
                 } else {
-                    if (displayLevel > 0.90f) {
-                        barColor = RGB(255, 50, 50);   // Red (Clipping)
-                    } else if (displayLevel > 0.65f) {
-                        barColor = RGB(255, 200, 0);   // Yellow (Loud)
-                    } else {
-                        barColor = colorLive;          // standard color (likely Green/Blue)
-                    }
+                    // Yellow to Red
+                    // 0.5: 255,255,0
+                    // 1.0: 255,0,0
+                    r = 255;
+                    g = 255 - (int)((displayLevel - 0.5f) * 2.0f * 255.0f);
                 }
                 
-                HBRUSH currentBarBrush = CreateSolidBrush(barColor);
-
-                RECT barRect;
-                barRect.left = startX + i * (barWidth + gap);
-                barRect.right = barRect.left + barWidth;
-                barRect.top = centerY - barHeight / 2;
-                barRect.bottom = centerY + barHeight / 2;
+                // Dim if very old sample? No, standard view is uniform brightness.
                 
-                FillRect(hdc, &barRect, currentBarBrush);
-                DeleteObject(currentBarBrush);
+                COLORREF col = RGB(r, g, b);
+                if (muted) col = RGB(50, 50, 50);
+
+                HPEN linePen = CreatePen(PS_SOLID, 1, col); // Thicker lines? 1px is fine for 128 samples in 180px width
+                
+                // Draw Vertical Line centered
+                int x = startX + (int)(i * stepX);
+                
+                SelectObject(hdc, linePen);
+                MoveToEx(hdc, x, centerY - halfHeight, NULL);
+                LineTo(hdc, x, centerY + halfHeight);
+                
+                DeleteObject(linePen);
             }
-            // Removed redundant DeleteObject(barBrush) since we create/delete inside loop now
             
             EndPaint(hWnd, &ps);
             return 0;

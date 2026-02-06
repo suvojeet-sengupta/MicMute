@@ -29,7 +29,7 @@ extern HICON hIconMicOff;
 extern int overlayOpacity;
 
 // Level history for waveform
-#define LEVEL_HISTORY_SIZE 30
+#define LEVEL_HISTORY_SIZE 128
 extern float levelHistory[LEVEL_HISTORY_SIZE];
 extern int levelHistoryIndex;
 
