@@ -57,3 +57,6 @@ extern POINT dragStart;
 extern POINT clickStart;
 extern bool isMeterDragging;
 extern POINT meterDragStart;
+
+// DPI Helper
+float GetWindowScale(HWND hWnd);

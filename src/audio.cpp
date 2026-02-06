@@ -1,4 +1,5 @@
 #include "audio.h"
+#include "resource.h"
 #include <iostream>
 #include <windows.h>
 #include <stdio.h>
@@ -12,29 +13,8 @@
 // Link against required libs
 #pragma comment(lib, "ole32.lib")
 
-// ==========================================
-// Utils: Safe COM Pointer
-// ==========================================
-template <class T>
-class SafeComPtr {
-public:
-    T* ptr;
-    SafeComPtr() : ptr(NULL) {}
-    SafeComPtr(T* p) : ptr(p) { if(ptr) ptr->AddRef(); }
-    ~SafeComPtr() { Release(); }
-    
-    void Release() {
-        if (ptr) {
-            ptr->Release();
-            ptr = NULL;
-        }
-    }
-    
-    T** operator&() { Release(); return &ptr; }
-    T* operator->() { return ptr; }
-    operator bool() { return ptr != NULL; }
-    bool operator!() { return ptr == NULL; }
-};
+// Link against required libs
+#pragma comment(lib, "ole32.lib")
 
 // ==========================================
 // Utils: Registry Helpers
@@ -63,29 +43,68 @@ float RegReadVolume(const std::wstring& deviceId) {
 }
 
 // ==========================================
+// Audio Callback Class
+// ==========================================
+class AudioVolumeCallback : public IAudioEndpointVolumeCallback {
+    LONG _cRef;
+public:
+    AudioVolumeCallback() : _cRef(1) {}
+    
+    // IUnknown methods
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppv) {
+        if (riid == __uuidof(IUnknown) || riid == __uuidof(IAudioEndpointVolumeCallback)) {
+            *ppv = static_cast<IAudioEndpointVolumeCallback*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = NULL;
+        return E_NOINTERFACE;
+    }
+    STDMETHODIMP_(ULONG) AddRef() {
+        return InterlockedIncrement(&_cRef);
+    }
+    STDMETHODIMP_(ULONG) Release() {
+        LONG ref = InterlockedDecrement(&_cRef);
+        if (ref == 0) delete this;
+        return ref;
+    }
+
+    // Callback method
+    STDMETHODIMP OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA pNotify) {
+        // Trigger UI update on main thread
+        // We use PostMessage because this runs on a high-priority RPC thread provided by Windows
+        extern HWND hMainWnd;
+        if (hMainWnd) {
+            PostMessage(hMainWnd, WM_APP_MUTE_CHANGED, 0, 0);
+        }
+        return S_OK;
+    }
+};
+
+// ==========================================
 // AudioManager Class
 // ==========================================
 class AudioManager {
 private:
-    SafeComPtr<IMMDeviceEnumerator> pEnumerator;
-    SafeComPtr<IMMDevice> pDefaultDevice;
-    SafeComPtr<IAudioMeterInformation> pMeterInfo;
+    ComPtr<IMMDeviceEnumerator> pEnumerator;
+    ComPtr<IMMDevice> pDefaultDevice;
+    ComPtr<IAudioMeterInformation> pMeterInfo;
+    ComPtr<IAudioEndpointVolume> pEndpointVolume;
 
-    SafeComPtr<IMMDevice> pSpeakerDevice;
-    SafeComPtr<IAudioMeterInformation> pSpeakerMeterInfo;
+    ComPtr<IMMDevice> pSpeakerDevice;
+    ComPtr<IAudioMeterInformation> pSpeakerMeterInfo;
     
     std::atomic<float> currentPeakLevel;
     std::atomic<float> currentSpeakerLevel;
     std::atomic<bool> isMutedGlobal;
     std::mutex deviceMutex;
     
-    std::thread pollerThread;
-    std::atomic<bool> stopThread;
+    ComPtr<AudioVolumeCallback> pVolumeCallback;
 
     void InitializeCOM() {
         if (!pEnumerator) {
             CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, 
-                __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+                IID_PPV_ARGS(&pEnumerator));
         }
     }
 
@@ -95,217 +114,197 @@ private:
         InitializeCOM();
         if (!pEnumerator) return false;
 
+        bool deviceChanged = false;
+
         // 1. MIC (Capture)
-        SafeComPtr<IMMDevice> pNewRecDevice;
+        ComPtr<IMMDevice> pNewRecDevice;
         HRESULT hr = pEnumerator->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pNewRecDevice);
         
         if (SUCCEEDED(hr)) {
-            if (!pDefaultDevice) {
-                pDefaultDevice = pNewRecDevice.ptr;
-                pDefaultDevice.ptr->AddRef(); 
-            }
-            if (pDefaultDevice && !pMeterInfo) {
+            // Check identity to see if we need to re-register callback
+            LPWSTR currentId = NULL;
+            LPWSTR newId = NULL;
+            
+            if (pDefaultDevice) pDefaultDevice->GetId(&currentId);
+            if (pNewRecDevice) pNewRecDevice->GetId(&newId);
+            
+            bool different = false;
+            if (!currentId && newId) different = true;
+            else if (currentId && !newId) different = true;
+            else if (currentId && newId && wcscmp(currentId, newId) != 0) different = true;
+            
+            if (currentId) CoTaskMemFree(currentId);
+            if (newId) CoTaskMemFree(newId);
+
+            if (different || !pDefaultDevice) {
+                // Unregister old callback if exists
+                if (pEndpointVolume && pVolumeCallback) {
+                    pEndpointVolume->UnregisterControlChangeNotify(pVolumeCallback.Get());
+                }
+
+                pDefaultDevice = pNewRecDevice;
+                pEndpointVolume.Reset();
+                pMeterInfo.Reset();
+
                 pDefaultDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pMeterInfo);
+                pDefaultDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pEndpointVolume);
+
+                // Register new callback
+                if (pEndpointVolume && !pVolumeCallback) {
+                    pVolumeCallback = new AudioVolumeCallback(); // ComPtr will manage RefCount
+                }
+                if (pEndpointVolume && pVolumeCallback) {
+                    pEndpointVolume->RegisterControlChangeNotify(pVolumeCallback.Get());
+                }
+                deviceChanged = true;
+            } else {
+                 // Even if same device, make sure interfaces are alive
+                 if (!pMeterInfo) pDefaultDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pMeterInfo);
+                 if (!pEndpointVolume) {
+                     pDefaultDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pEndpointVolume);
+                     if (pEndpointVolume && pVolumeCallback) {
+                         pEndpointVolume->RegisterControlChangeNotify(pVolumeCallback.Get());
+                     }
+                 }
             }
         } else {
-             pDefaultDevice.Release();
-             pMeterInfo.Release();
+             if (pEndpointVolume && pVolumeCallback) {
+                 pEndpointVolume->UnregisterControlChangeNotify(pVolumeCallback.Get());
+             }
+             pDefaultDevice.Reset();
+             pMeterInfo.Reset();
+             pEndpointVolume.Reset();
         }
 
-        // 2. SPEAKER (Render)
-        SafeComPtr<IMMDevice> pNewRenderDevice;
+        // 2. SPEAKER (Render) (Just for meter)
+        ComPtr<IMMDevice> pNewRenderDevice;
         hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &pNewRenderDevice);
         
         if (SUCCEEDED(hr)) {
             if (!pSpeakerDevice) {
-                pSpeakerDevice = pNewRenderDevice.ptr;
-                pSpeakerDevice.ptr->AddRef(); 
-            }
-            if (pSpeakerDevice && !pSpeakerMeterInfo) {
+                pSpeakerDevice = pNewRenderDevice;
                 pSpeakerDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pSpeakerMeterInfo);
             }
         } else {
-             pSpeakerDevice.Release();
-             pSpeakerMeterInfo.Release();
-        }
-
-        return (pDefaultDevice && pMeterInfo); // Return true if at least Mic works
-    }
-
-    void PollerLoop() {
-        CoInitialize(NULL);
-        while (!stopThread) {
-            UpdateDevices();
-            
-            float peak = 0.0f;
-            float speak = 0.0f;
-
-            std::lock_guard<std::mutex> lock(deviceMutex);
-            if (pMeterInfo) {
-                pMeterInfo->GetPeakValue(&peak);
-                if (peak < 0.0f) peak = 0.0f;
-                if (peak > 1.0f) peak = 1.0f;
-            }
-            
-            if (pSpeakerMeterInfo) {
-                pSpeakerMeterInfo->GetPeakValue(&speak);
-                if (speak < 0.0f) speak = 0.0f;
-                if (speak > 1.0f) speak = 1.0f;
-            }
-
-            currentPeakLevel = peak;
-            currentSpeakerLevel = speak;
-            
-            Sleep(16); // Poll every ~16ms (60fps)
+             pSpeakerDevice.Reset();
+             pSpeakerMeterInfo.Reset();
         }
         
-        // Cleanup thread-local COM
-        {
-            std::lock_guard<std::mutex> lock(deviceMutex);
-            pMeterInfo.Release();
-            pDefaultDevice.Release();
-            pSpeakerMeterInfo.Release();
-            pSpeakerDevice.Release();
-            pEnumerator.Release();
+        // Initial sync of mute state
+        if (deviceChanged && pEndpointVolume) {
+            BOOL bMute;
+            pEndpointVolume->GetMute(&bMute);
+            isMutedGlobal = (bMute == TRUE);
         }
-        CoUninitialize();
+
+        return (pDefaultDevice && pMeterInfo); 
     }
 
 public:
-    AudioManager() : currentPeakLevel(0.0f), currentSpeakerLevel(0.0f), isMutedGlobal(false), stopThread(false) {}
+    AudioManager() : currentPeakLevel(0.0f), currentSpeakerLevel(0.0f), isMutedGlobal(false) {}
+    
+    ~AudioManager() {
+        Stop();
+    }
 
     void Start() {
-        stopThread = false;
-        pollerThread = std::thread(&AudioManager::PollerLoop, this);
+        // Just UpdateDevices once to hook everything up
+        UpdateDevices();
     }
 
     void Stop() {
-        stopThread = true;
-        if (pollerThread.joinable()) {
-            pollerThread.join();
+        std::lock_guard<std::mutex> lock(deviceMutex);
+        if (pEndpointVolume && pVolumeCallback) {
+            pEndpointVolume->UnregisterControlChangeNotify(pVolumeCallback.Get());
         }
+        pEndpointVolume.Reset();
+        pVolumeCallback.Reset();
+        pMeterInfo.Reset();
+        pDefaultDevice.Reset();
+        pSpeakerMeterInfo.Reset();
+        pSpeakerDevice.Reset();
+        pEnumerator.Reset();
     }
 
     float GetCurrentLevel() {
-        return currentPeakLevel;
+        // Meter still needs to be polled, but ONLY when requested (by UI timer)
+        // We do it on demand here instead of a background thread
+        // Ideally we would optimize this to not Activate() every time if possible (cached above)
+        
+        float peak = 0.0f;
+        std::lock_guard<std::mutex> lock(deviceMutex);
+        if (pMeterInfo) {
+            pMeterInfo->GetPeakValue(&peak);
+        }
+        return peak;
     }
 
     float GetCurrentSpeakerLevel() {
-        return currentSpeakerLevel;
+        float peak = 0.0f;
+        std::lock_guard<std::mutex> lock(deviceMutex);
+        if (pSpeakerMeterInfo) {
+            pSpeakerMeterInfo->GetPeakValue(&peak);
+        }
+        return peak;
     }
 
     bool GetMuteState() {
-        // We trust our internal state first, but verifying with hardware is good occasionally
-        // For high freq calls, return internal state
         return isMutedGlobal;
     }
     
-    // Mute/Unmute Logic with persistence
-    // Returns new mute state
+    // Mute/Unmute Logic
     bool SetMute(bool mute) {
-        // This runs on MAIN THREAD usually (triggered by user action)
-        // So we need to init COM on this thread if not already
-        // But we shouldn't share COM objects across threads without marshalling.
-        // EASIEST: Just create a temporary enumerator here. 
-        // Logic changes infrequently, so creation overhead is acceptable here (unlike GetMicLevel).
+        std::lock_guard<std::mutex> lock(deviceMutex);
         
-        HRESULT hr;
-        IMMDeviceEnumerator* pEnum = NULL;
-        hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, 
-            __uuidof(IMMDeviceEnumerator), (void**)&pEnum);
-            
-        if (FAILED(hr)) return isMutedGlobal;
+        if (pEndpointVolume) {
+             LPWSTR wstrId = NULL;
+             if (pDefaultDevice) pDefaultDevice->GetId(&wstrId);
+             std::wstring deviceId = wstrId ? wstrId : L"Unknown";
+             if (wstrId) CoTaskMemFree(wstrId);
 
-        IMMDeviceCollection* pCollection = NULL;
-        pEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
-        
-        if (pCollection) {
-            UINT count = 0;
-            pCollection->GetCount(&count);
-            
-            for (UINT i = 0; i < count; i++) {
-                IMMDevice* pDevice = NULL;
-                pCollection->Item(i, &pDevice);
-                if (pDevice) {
-                    LPWSTR wstrId = NULL;
-                    pDevice->GetId(&wstrId);
-                    std::wstring deviceId = wstrId ? wstrId : L"Unknown";
-                    if (wstrId) CoTaskMemFree(wstrId);
-
-                    IAudioEndpointVolume* pVolume = NULL;
-                    pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pVolume);
-                    
-                    if (pVolume) {
-                        if (mute) {
-                            // MUTE OPERATION
-                            float currentVol = 0.0f;
-                            pVolume->GetMasterVolumeLevelScalar(&currentVol);
-                            
-                            // Save if > 0
-                            if (currentVol > 0.01f) {
-                                RegWriteVolume(deviceId, currentVol);
-                            }
-                            
-                            // Mute using Volume 0 AND Native Mute
-                            pVolume->SetMasterVolumeLevelScalar(0.0f, NULL);
-                            pVolume->SetMute(TRUE, NULL);
-                            
-                        } else {
-                            // UNMUTE OPERATION
-                            float savedVol = RegReadVolume(deviceId);
-                            
-                            // Safety clamp: if not found or weird, default to 100%
-                            if (savedVol < 0.0f || savedVol > 1.0f) savedVol = 1.0f;
-                            
-                            // Set Volume
-                            pVolume->SetMasterVolumeLevelScalar(savedVol, NULL);
-                            pVolume->SetMute(FALSE, NULL);
-                        }
-                        pVolume->Release();
-                    }
-                    pDevice->Release();
+            if (mute) {
+                // MUTE OPERATION
+                float currentVol = 0.0f;
+                pEndpointVolume->GetMasterVolumeLevelScalar(&currentVol);
+                
+                if (currentVol > 0.01f) {
+                    RegWriteVolume(deviceId, currentVol);
                 }
+                
+                pEndpointVolume->SetMasterVolumeLevelScalar(0.0f, NULL);
+                pEndpointVolume->SetMute(TRUE, NULL);
+            } else {
+                // UNMUTE OPERATION
+                float savedVol = RegReadVolume(deviceId);
+                if (savedVol < 0.0f || savedVol > 1.0f) savedVol = 1.0f;
+                
+                pEndpointVolume->SetMasterVolumeLevelScalar(savedVol, NULL);
+                pEndpointVolume->SetMute(FALSE, NULL);
             }
-            pCollection->Release();
+            
+            isMutedGlobal = mute;
+        } else {
+            // Try updating devices and retry?
+            // simplified: just ignored if no device
         }
-        
-        if (pEnum) pEnum->Release();
-        
-        isMutedGlobal = mute;
         return mute;
     }
 
     bool CheckIfMuted() {
-         // Check actual hardware state of default device
-        HRESULT hr;
-        IMMDeviceEnumerator* pEnum = NULL;
-        hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, 
-            __uuidof(IMMDeviceEnumerator), (void**)&pEnum);
-            
-        bool result = false;
-        if (SUCCEEDED(hr)) {
-            IMMDevice* pDevice = NULL;
-            pEnum->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDevice);
-            if (pDevice) {
-                IAudioEndpointVolume* pVol = NULL;
-                pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pVol);
-                if (pVol) {
-                    BOOL bMute;
-                    float fVol;
-                    pVol->GetMute(&bMute);
-                    pVol->GetMasterVolumeLevelScalar(&fVol);
-                    // Muted if switch is on OR volume is zero
-                    result = (bMute == TRUE) || (fVol < 0.01f);
-                    pVol->Release();
-                }
-                pDevice->Release();
-            }
-            pEnum->Release();
-        }
+        std::lock_guard<std::mutex> lock(deviceMutex);
+        // Only refresh if we lost device or startup
+        if (!pEndpointVolume) UpdateDevices(); 
         
-        // Sync global state
-        isMutedGlobal = result;
-        return result;
+        if (pEndpointVolume) {
+            BOOL bMute;
+            float fVol;
+            pEndpointVolume->GetMute(&bMute);
+            pEndpointVolume->GetMasterVolumeLevelScalar(&fVol);
+            bool result = (bMute == TRUE) || (fVol < 0.01f);
+            isMutedGlobal = result;
+            return result;
+        }
+        return false;
     }
 };
 
@@ -313,11 +312,11 @@ public:
 // Global Wrapper Functions
 // ==========================================
 // Singleton instance
-static AudioManager* g_Audio = NULL;
+static std::unique_ptr<AudioManager> g_Audio;
 
 void InitializeAudio() {
     if (!g_Audio) {
-        g_Audio = new AudioManager();
+        g_Audio = std::make_unique<AudioManager>();
         g_Audio->Start();
         // Initial state check
         g_Audio->CheckIfMuted();
@@ -327,8 +326,7 @@ void InitializeAudio() {
 void UninitializeAudio() {
     if (g_Audio) {
         g_Audio->Stop();
-        delete g_Audio;
-        g_Audio = NULL;
+        g_Audio.reset();
     }
 }
 

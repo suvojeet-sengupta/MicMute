@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <dwmapi.h>
+#include <commctrl.h> // Common Controls (Tabs)
 #include <string>
 #include "resource.h"
 #include "globals.h"
@@ -13,9 +14,34 @@
 
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "comctl32.lib")
 
 // Main Window Procedure
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+
+// Controls
+HWND hTabControl = NULL;
+// General Tab
+HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck;
+// Placeholders
+HWND hLabelHotkeys, hLabelAudio, hLabelAppearance;
+
+void UpdateTabVisibility(int tabIndex) {
+    bool isGeneral = (tabIndex == 0);
+    bool isHotkeys = (tabIndex == 1);
+    bool isAudio = (tabIndex == 2);
+    bool isAppearance = (tabIndex == 3);
+
+    int showGeneral = isGeneral ? SW_SHOW : SW_HIDE;
+    ShowWindow(hStartupCheck, showGeneral);
+    ShowWindow(hOverlayCheck, showGeneral);
+    ShowWindow(hMeterCheck, showGeneral);
+    ShowWindow(hRecorderCheck, showGeneral);
+    
+    ShowWindow(hLabelHotkeys, isHotkeys ? SW_SHOW : SW_HIDE);
+    ShowWindow(hLabelAudio, isAudio ? SW_SHOW : SW_HIDE);
+    ShowWindow(hLabelAppearance, isAppearance ? SW_SHOW : SW_HIDE);
+}
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     // Single instance check using a named mutex
@@ -30,6 +56,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         CloseHandle(hMutex);
         return 0;
     }
+
+    // Init Common Controls
+    INITCOMMONCONTROLSEX icex;
+    icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
+    icex.dwICC = ICC_TAB_CLASSES;
+    InitCommonControlsEx(&icex);
 
     InitializeAudio();
 
@@ -87,7 +119,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // Window size and position
     int width = 450;
-    int height = 500; // Increased height for new option
+    int height = 500; 
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
     int x = (screenW - width) / 2;
@@ -125,28 +157,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     
     // First run dialog
     if (!IsStartupEnabled()) {
-        int result = MessageBox(hMainWnd, 
-            "Would you like MicMute-S to start automatically with Windows?\n\nThis is recommended for seamless microphone control.",
-            "Enable Startup?", MB_YESNO | MB_ICONQUESTION);
-        if (result == IDYES) {
+        if (MessageBox(hMainWnd, "Enable Startup with Windows?", "MicMute-S", MB_YESNO | MB_ICONQUESTION) == IDYES) {
             ManageStartup(true);
             isRunOnStartup = true;
         }
-        
-        result = MessageBox(hMainWnd,
-            "Would you like to show a floating mute button on screen?\n\nThis small draggable button stays visible for quick mute/unmute.",
-            "Enable Floating Button?", MB_YESNO | MB_ICONQUESTION);
-        if (result == IDYES) {
-            showOverlay = true;
-        }
-        
-        result = MessageBox(hMainWnd,
-            "Would you like to show a voice level meter?\n\nThis shows if your microphone is picking up sound.",
-            "Enable Voice Meter?", MB_YESNO | MB_ICONQUESTION);
-        if (result == IDYES) {
-            showMeter = true;
-        }
-        
+        if (MessageBox(hMainWnd, "Enable Floating Mute Button?", "MicMute-S", MB_YESNO | MB_ICONQUESTION) == IDYES) showOverlay = true;
+        if (MessageBox(hMainWnd, "Enable Voice Activity Meter?", "MicMute-S", MB_YESNO | MB_ICONQUESTION) == IDYES) showMeter = true;
         SaveSettings();
     }
 
@@ -191,62 +207,117 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    static HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck;
-
     switch (msg) {
         case WM_CREATE: {
             HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
             
+            // Header
             CreateWindow("STATIC", "MicMute-S", WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 20, 450, 50, hWnd, NULL, hInst, NULL);
+                0, 10, 450, 50, hWnd, NULL, hInst, NULL);
             SendMessage(GetDlgItem(hWnd, 0), WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
             CreateWindow("STATIC", "Checking...", WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                0, 75, 450, 35, hWnd, (HMENU)ID_STATUS_LABEL, hInst, NULL);
+                0, 60, 450, 35, hWnd, (HMENU)ID_STATUS_LABEL, hInst, NULL);
+            
+            // Tab Control
+            hTabControl = CreateWindow(WC_TABCONTROL, "", WS_CHILD | WS_CLIPSIBLINGS | WS_VISIBLE, 
+                10, 110, 415, 300, hWnd, (HMENU)ID_TAB_CONTROL, hInst, NULL);
+            SendMessage(hTabControl, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
 
-            CreateWindow("STATIC", "", WS_VISIBLE | WS_CHILD | SS_ETCHEDHORZ, 50, 125, 350, 2, hWnd, NULL, hInst, NULL);
+            TCITEM tie;
+            tie.mask = TCIF_TEXT;
+            
+            tie.pszText = "General";
+            TabCtrl_InsertItem(hTabControl, 0, &tie);
+            
+            tie.pszText = "Hotkeys";
+            TabCtrl_InsertItem(hTabControl, 1, &tie);
+            
+            tie.pszText = "Audio";
+            TabCtrl_InsertItem(hTabControl, 2, &tie);
+            
+            tie.pszText = "Appearance";
+            TabCtrl_InsertItem(hTabControl, 3, &tie);
+
+            // -- GENERAL TAB CONTROLS --
+            // Position relative to Tab Client Area (approx inside 10,110 + padding)
+            // Tab client area usually starts ~30px down.
+            // Let's use absolute positioning over the tab background for simplicity in this GDI app
+            int tabY_offset = 150; 
+            int chkX = 30;
 
             hStartupCheck = CreateWindow("BUTTON", "  Launch on Windows startup", 
-                WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 80, 145, 300, 28, hWnd, (HMENU)ID_RUN_STARTUP, hInst, NULL);
+                WS_CHILD | BS_AUTOCHECKBOX, chkX, tabY_offset, 300, 28, hWnd, (HMENU)ID_RUN_STARTUP, hInst, NULL);
             SendMessage(hStartupCheck, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
             SendMessage(hStartupCheck, BM_SETCHECK, isRunOnStartup ? BST_CHECKED : BST_UNCHECKED, 0);
 
             hOverlayCheck = CreateWindow("BUTTON", "  Show floating mute button", 
-                WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 80, 178, 300, 28, hWnd, (HMENU)ID_SHOW_OVERLAY, hInst, NULL);
+                WS_CHILD | BS_AUTOCHECKBOX, chkX, tabY_offset + 35, 300, 28, hWnd, (HMENU)ID_SHOW_OVERLAY, hInst, NULL);
             SendMessage(hOverlayCheck, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
             SendMessage(hOverlayCheck, BM_SETCHECK, showOverlay ? BST_CHECKED : BST_UNCHECKED, 0);
 
             hMeterCheck = CreateWindow("BUTTON", "  Show voice level meter", 
-                WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 80, 211, 300, 28, hWnd, (HMENU)ID_SHOW_METER, hInst, NULL);
+                WS_CHILD | BS_AUTOCHECKBOX, chkX, tabY_offset + 70, 300, 28, hWnd, (HMENU)ID_SHOW_METER, hInst, NULL);
             SendMessage(hMeterCheck, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
             SendMessage(hMeterCheck, BM_SETCHECK, showMeter ? BST_CHECKED : BST_UNCHECKED, 0);
 
             hRecorderCheck = CreateWindow("BUTTON", "  Show call recorder", 
-                WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 80, 244, 300, 28, hWnd, (HMENU)ID_SHOW_RECORDER, hInst, NULL);
+                WS_CHILD | BS_AUTOCHECKBOX, chkX, tabY_offset + 105, 300, 28, hWnd, (HMENU)ID_SHOW_RECORDER, hInst, NULL);
             SendMessage(hRecorderCheck, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
             SendMessage(hRecorderCheck, BM_SETCHECK, showRecorder ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            CreateWindow("STATIC", "Click tray/floating button to toggle mute", 
-                WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 290, 450, 18, hWnd, NULL, hInst, NULL);
-            CreateWindow("STATIC", "Drag overlays to move  |  Right-click to hide", 
-                WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 310, 450, 18, hWnd, NULL, hInst, NULL);
-            CreateWindow("STATIC", "Minimize to hide  |  Right-click tray for menu", 
-                WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 330, 450, 18, hWnd, NULL, hInst, NULL);
+            // -- PLACEHOLDERS --
+            hLabelHotkeys = CreateWindow("STATIC", "Global Hotkeys Coming Soon...", WS_CHILD | SS_CENTER, 
+                20, 200, 390, 50, hWnd, NULL, hInst, NULL);
+            SendMessage(hLabelHotkeys, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
+            
+            hLabelAudio = CreateWindow("STATIC", "Audio Device Selector Coming Soon...", WS_CHILD | SS_CENTER, 
+                20, 200, 390, 50, hWnd, NULL, hInst, NULL);
+            SendMessage(hLabelAudio, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
+
+            hLabelAppearance = CreateWindow("STATIC", "Theme Settings Coming Soon...", WS_CHILD | SS_CENTER, 
+                20, 200, 390, 50, hWnd, NULL, hInst, NULL);
+            SendMessage(hLabelAppearance, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
+
+            // Footer
             CreateWindow("STATIC", "by Suvojeet Sengupta", 
-                WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 370, 450, 18, hWnd, NULL, hInst, NULL);
+                WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 430, 450, 18, hWnd, NULL, hInst, NULL);
+                
+            // Initial Show
+            UpdateTabVisibility(0);
+            break;
+        }
+
+        case WM_NOTIFY: {
+            NMHDR* pnm = (NMHDR*)lParam;
+            if (pnm->idFrom == ID_TAB_CONTROL && pnm->code == TCN_SELCHANGE) {
+                int index = TabCtrl_GetCurSel(hTabControl);
+                UpdateTabVisibility(index);
+            }
             break;
         }
 
         case WM_CTLCOLORSTATIC: {
             HDC hdc = (HDC)wParam;
             SetBkColor(hdc, colorBg);
-            if (GetDlgCtrlID((HWND)lParam) == ID_STATUS_LABEL) {
+            int id = GetDlgCtrlID((HWND)lParam);
+            if (id == ID_STATUS_LABEL) {
                 SetTextColor(hdc, IsDefaultMicMuted() ? colorMuted : colorLive);
                 SelectObject(hdc, hFontStatus);
             } else {
                 SetTextColor(hdc, colorText);
             }
             return (LRESULT)hBrushBg;
+        }
+        
+        // Make sure Checkboxes have transparency on the tab bg (which is colorBg)
+        case WM_CTLCOLORBTN: {
+             // For buttons, if we want them to blend with dark theme:
+             // Standard buttons don't support custom colors easily without owner draw.
+             // But existing code didn't handle it, so they likely look 'classic' or 'themed'
+             // If we really want them dark, we need OwnerDraw or Manifest + dark theme hook.
+             // For now, let's keep it simple as before.
+             return (LRESULT)hBrushBg; 
         }
 
         case WM_COMMAND: {
@@ -344,6 +415,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             RemoveTrayIcon();
             PostQuitMessage(0);
             break;
+
+        case WM_APP_MUTE_CHANGED:
+            UpdateUIState();
+            return 0;
 
         default:
             return DefWindowProc(hWnd, msg, wParam, lParam);

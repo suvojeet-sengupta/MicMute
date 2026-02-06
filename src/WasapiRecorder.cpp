@@ -203,7 +203,7 @@ bool WasapiRecorder::SaveToFile(const std::string& filename) {
     if (!file.is_open()) return false;
 
     // Use actual format from pwfx
-    WriteWavHeader(file, audioBuffer.size(), pwfx->nSamplesPerSec, pwfx->nChannels, pwfx->wBitsPerSample);
+    WriteWavHeader(file, (int)audioBuffer.size(), pwfx->nSamplesPerSec, pwfx->nChannels, pwfx->wBitsPerSample);
     
     file.write((char*)audioBuffer.data(), audioBuffer.size());
     file.close();

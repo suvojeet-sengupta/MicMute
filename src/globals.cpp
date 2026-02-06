@@ -50,3 +50,18 @@ POINT dragStart;
 POINT clickStart;
 bool isMeterDragging = false;
 POINT meterDragStart;
+
+float GetWindowScale(HWND hWnd) {
+    // Try GetDpiForWindow (Win 10 1607+)
+    static auto pGetDpiForWindow = (UINT(WINAPI*)(HWND))GetProcAddress(GetModuleHandle("User32.dll"), "GetDpiForWindow");
+    if (pGetDpiForWindow && hWnd) {
+         UINT dpi = pGetDpiForWindow(hWnd);
+         return dpi / 96.0f;
+    }
+    
+    // Fallback: System DPI
+    HDC hdc = GetDC(NULL);
+    int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+    ReleaseDC(NULL, hdc);
+    return dpi / 96.0f;
+}

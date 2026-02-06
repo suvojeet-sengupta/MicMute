@@ -66,10 +66,13 @@ void CreateRecorderWindow(HINSTANCE hInstance) {
     int x, y;
     LoadRecorderPosition(&x, &y);
     
+    // Scale factor
+    float scale = GetWindowScale(NULL);
+    
     hRecorderWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
         "MicMuteS_Recorder", "Call Recorder", WS_POPUP | WS_CAPTION | WS_SYSMENU,
-        x, y, 200, 100,
+        x, y, (int)(200 * scale), (int)(100 * scale),
         NULL, NULL, hInstance, NULL
     );
     
@@ -79,11 +82,11 @@ void CreateRecorderWindow(HINSTANCE hInstance) {
         
         // Buttons
         HWND hBtn = CreateWindow("BUTTON", "Start", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 
-            10, 10, 80, 40, hRecorderWnd, (HMENU)BTN_START_PAUSE, hInstance, NULL);
+            (int)(10 * scale), (int)(10 * scale), (int)(80 * scale), (int)(40 * scale), hRecorderWnd, (HMENU)BTN_START_PAUSE, hInstance, NULL);
         SendMessage(hBtn, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
 
         HWND hBtn2 = CreateWindow("BUTTON", "Stop/Save", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 
-            110, 10, 80, 40, hRecorderWnd, (HMENU)BTN_STOP_SAVE, hInstance, NULL);
+            (int)(110 * scale), (int)(10 * scale), (int)(80 * scale), (int)(40 * scale), hRecorderWnd, (HMENU)BTN_STOP_SAVE, hInstance, NULL);
         SendMessage(hBtn2, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
         EnableWindow(hBtn2, FALSE);
 

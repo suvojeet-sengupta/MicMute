@@ -30,6 +30,11 @@ void CreateOverlayWindow(HINSTANCE hInstance) {
 
         // Set initial transparency
         SetLayeredWindowAttributes(hOverlayWnd, colorChroma, (BYTE)overlayOpacity, LWA_ALPHA | LWA_COLORKEY);
+        
+        // Initial resize based on DPI
+        float scale = GetWindowScale(hOverlayWnd);
+        SetWindowPos(hOverlayWnd, NULL, 0, 0, (int)(100 * scale), (int)(40 * scale), SWP_NOMOVE | SWP_NOZORDER);
+
         ShowWindow(hOverlayWnd, SW_SHOW);
         UpdateOverlay();
     }
@@ -44,11 +49,14 @@ void CreateMeterWindow(HINSTANCE hInstance) {
     memset(speakerLevelHistory, 0, sizeof(speakerLevelHistory));
     levelHistoryIndex = 0;
     
+    // Scaled initially? We need window handle first usually, OR assume system DPI
+    float scale = GetWindowScale(NULL);
+    
     // Increased height to 100 to accommodate dual meters (Advisor + CX)
     hMeterWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
         "MicMuteS_Meter", NULL, WS_POPUP,
-        meterX, meterY, 180, 100, 
+        meterX, meterY, (int)(180 * scale), (int)(100 * scale), 
         NULL, NULL, hInstance, NULL
     );
     
@@ -93,6 +101,18 @@ void UpdateMeter() {
 
 LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+        case WM_DPICHANGED: {
+             // Resize logic when moved to another monitor
+             RECT* const prcNewWindow = (RECT*)lParam;
+             SetWindowPos(hWnd,
+                 NULL,
+                 prcNewWindow->left,
+                 prcNewWindow->top,
+                 prcNewWindow->right - prcNewWindow->left,
+                 prcNewWindow->bottom - prcNewWindow->top,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+             return 0;
+        }
         case WM_TIMER:
             if (wParam == 3) {
                 // Animation logic
@@ -118,11 +138,15 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             HDC hdc = BeginPaint(hWnd, &ps);
             RECT rect;
             GetClientRect(hWnd, &rect);
+            float scale = GetWindowScale(hWnd);
             
             // Setup
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, RGB(255, 255, 255));
-            SelectObject(hdc, hFontOverlay);
+            SelectObject(hdc, hFontOverlay); // Note: Font size needs handling too...
+            // Creating a scaled font on fly or pre-creating?
+            // For now, let's keep font as is (Windows might scale it if we aren't careful, but we are DPI aware so...
+            // GDI fonts defined in main.cpp with explicit sizes. We might need to select a larger font here.)
             
             // Interpolate color
             COLORREF bgCol = InterpColor(colorOverlayBgLive, colorOverlayBgMuted, animProgress);
@@ -130,25 +154,29 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             
             SelectObject(hdc, bgBrush);
             SelectObject(hdc, GetStockObject(NULL_PEN)); 
-            RoundRect(hdc, 0, 0, rect.right, rect.bottom, 40, 40); // Full rounded corners
+            int corner = (int)(40 * scale);
+            RoundRect(hdc, 0, 0, rect.right, rect.bottom, corner, corner); // Full rounded corners
             
             DeleteObject(bgBrush);
             
             // Draw White Border
-            HPEN borderPen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
+            HPEN borderPen = CreatePen(PS_SOLID, (int)(2 * scale), RGB(255, 255, 255));
             SelectObject(hdc, borderPen);
             SelectObject(hdc, GetStockObject(NULL_BRUSH));
-            RoundRect(hdc, 1, 1, rect.right-1, rect.bottom-1, 40, 40);
+            RoundRect(hdc, 1, 1, rect.right-1, rect.bottom-1, corner, corner);
             DeleteObject(borderPen);
             
             // Determine icon based on progress (snap at 50%)
             bool showMuted = (animProgress > 0.5f);
             HICON hIcon = showMuted ? hIconMicOff : hIconMicOn;
-            DrawIconEx(hdc, 8, 10, hIcon, 20, 20, 0, NULL, DI_NORMAL);
+            int iconSize = (int)(20 * scale);
+            int iconX = (int)(8 * scale);
+            int iconY = (rect.bottom - iconSize) / 2; //(int)(10 * scale);
+            DrawIconEx(hdc, iconX, iconY, hIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
             
             // Draw Text
             RECT textRect = rect;
-            textRect.left += 32; // Shift text right
+            textRect.left += (int)(32 * scale); // Shift text right
             DrawText(hdc, showMuted ? "MUTED" : "LIVE", -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
             
             EndPaint(hWnd, &ps);
