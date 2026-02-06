@@ -24,3 +24,23 @@ void UpdateTrayIcon(bool isMuted) {
     strcpy_s(nid.szTip, isMuted ? "MicMute-S (Muted)" : "MicMute-S (Live)");
     Shell_NotifyIcon(NIM_MODIFY, &nid);
 }
+
+void ShowTrayNotification(bool isMuted) {
+    if (!showNotifications) return;
+
+    nid.uFlags |= NIF_INFO;
+    strcpy_s(nid.szInfoTitle, isMuted ? "Microphone Muted" : "Microphone Live");
+    strcpy_s(nid.szInfo, isMuted ? "Your microphone has been muted." : "Your microphone is now live.");
+    nid.dwInfoFlags = isMuted ? NIIF_WARNING : NIIF_INFO; // Warning icon for mute (red-ish usually), Info for live
+    // NIIF_WARNING is technically a yellow yield sign, NIIF_ERROR is red X.
+    // Let's use NIIF_INFO for both or NIIF_NONE to avoid confusing icons. 
+    // Or NIIF_USER if we had a custom icon. Win 10/11 toasts show the app icon anyway.
+    nid.dwInfoFlags = NIIF_NOSOUND | (isMuted ? NIIF_WARNING : NIIF_INFO);
+
+    Shell_NotifyIcon(NIM_MODIFY, &nid);
+    
+    // Reset flags
+    nid.uFlags &= ~NIF_INFO;
+    nid.szInfo[0] = '\0';
+    nid.szInfoTitle[0] = '\0';
+}

@@ -4,3 +4,4 @@
 void AddTrayIcon(HWND hWnd);
 void RemoveTrayIcon();
 void UpdateTrayIcon(bool isMuted);
+void ShowTrayNotification(bool isMuted);

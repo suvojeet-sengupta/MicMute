@@ -84,7 +84,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = hBrushBg;
+    wc.hbrBackground = NULL; // Required for Mica
     wc.lpszClassName = "MicMuteS_Class";
     wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
     RegisterClassEx(&wc);
@@ -137,9 +137,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     
     if (!hMainWnd) return 0;
 
+    // Definitions for Mica (if not in headers)
+    #ifndef DWMWA_SYSTEMBACKDROP_TYPE
+    #define DWMWA_SYSTEMBACKDROP_TYPE 38
+    #endif
+    #ifndef DWMSBT_MAINWINDOW
+    #define DWMSBT_MAINWINDOW 2
+    #endif
+
     // Dark Mode Titlebar (Windows 11)
     BOOL value = TRUE;
     DwmSetWindowAttribute(hMainWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof(value));
+    
+    // Mica Effect
+    int micaValue = DWMSBT_MAINWINDOW;
+    DwmSetWindowAttribute(hMainWnd, DWMWA_SYSTEMBACKDROP_TYPE, &micaValue, sizeof(micaValue));
     
     DWM_WINDOW_CORNER_PREFERENCE cornerPref = DWMWCP_ROUND;
     DwmSetWindowAttribute(hMainWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPref, sizeof(cornerPref));
@@ -250,6 +262,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 contentX, startY + gapY*3, 300, 30, hWnd, (HMENU)ID_SHOW_RECORDER, hInst, NULL);
             SendMessage(hRecorderCheck, BM_SETCHECK, showRecorder ? BST_CHECKED : BST_UNCHECKED, 0);
 
+            HWND hNotifyCheck = CreateWindow("BUTTON", "Show system notifications", 
+                WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
+                contentX, startY + gapY*4, 300, 30, hWnd, (HMENU)ID_SHOW_NOTIFICATIONS, hInst, NULL);
+            SendMessage(hNotifyCheck, BM_SETCHECK, showNotifications ? BST_CHECKED : BST_UNCHECKED, 0);
+
             // Footer
             CreateWindow("STATIC", "by Suvojeet Sengupta", 
                  WS_VISIBLE | WS_CHILD | SS_RIGHT, 600 - 160, 440, 140, 20, hWnd, NULL, hInst, NULL);
@@ -257,6 +274,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             UpdateControlVisibility();
             break;
         }
+
+        case WM_ERASEBKGND:
+            return 1; // Prevent flickering for Mica
 
         case WM_PAINT: {
             PAINTSTRUCT ps;
@@ -415,6 +435,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     else ShowWindow(hRecorderWnd, SW_SHOW);
                 } else if (hRecorderWnd) ShowWindow(hRecorderWnd, SW_HIDE);
                 InvalidateRect(hRecorderCheck, NULL, FALSE);
+            }
+            else if (wmId == ID_SHOW_NOTIFICATIONS) {
+                showNotifications = !showNotifications;
+                SaveSettings();
+                InvalidateRect((HWND)lParam, NULL, FALSE);
             }
             else if (wmId == ID_TRAY_OPEN) {
                 ShowWindow(hWnd, SW_RESTORE);

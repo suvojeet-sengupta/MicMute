@@ -12,6 +12,7 @@ extern bool isRunOnStartup;
 extern bool showOverlay;
 extern bool showMeter;
 extern bool showRecorder;
+extern bool showNotifications;
 
 extern HFONT hFontTitle;
 extern HFONT hFontStatus;

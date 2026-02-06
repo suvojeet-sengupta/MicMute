@@ -10,6 +10,7 @@ bool isRunOnStartup = false;
 bool showOverlay = false;
 bool showMeter = false;
 bool showRecorder = false;
+bool showNotifications = true; // Default true
 
 HFONT hFontTitle;
 HFONT hFontStatus;

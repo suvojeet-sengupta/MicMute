@@ -15,6 +15,7 @@ void UpdateUIState() {
         lastMuted = (int)muted;
         UpdateTrayIcon(muted);
         UpdateOverlay();
+        ShowTrayNotification(muted); // Trigger Toast
 
         HWND hStatus = GetDlgItem(hMainWnd, ID_STATUS_LABEL);
         if (hStatus) {

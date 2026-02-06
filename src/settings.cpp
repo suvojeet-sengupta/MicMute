@@ -55,6 +55,8 @@ void SaveSettings() {
         RegSetValueEx(hKey, "ShowMeter", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
         val = showRecorder ? 1 : 0;
         RegSetValueEx(hKey, "ShowRecorder", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+        val = showNotifications ? 1 : 0;
+        RegSetValueEx(hKey, "ShowNotifications", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
         RegCloseKey(hKey);
     }
 }
@@ -70,6 +72,8 @@ void LoadSettings() {
             showMeter = val != 0;
         if (RegQueryValueEx(hKey, "ShowRecorder", NULL, NULL, (BYTE*)&val, &size) == ERROR_SUCCESS)
             showRecorder = val != 0;
+        if (RegQueryValueEx(hKey, "ShowNotifications", NULL, NULL, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            showNotifications = val != 0;
         RegCloseKey(hKey);
     }
 }
