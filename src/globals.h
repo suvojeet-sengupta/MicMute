@@ -37,19 +37,29 @@ extern int levelHistoryIndex;
 
 // Colors
 extern COLORREF colorBg;
+extern COLORREF colorSidebarBg; 
 extern COLORREF colorText;
+extern COLORREF colorTextDim;
 extern COLORREF colorMuted;
 extern COLORREF colorLive;
 extern COLORREF colorOverlayBgMuted;
 extern COLORREF colorOverlayBgLive;
 extern COLORREF colorMeterBg;
 extern COLORREF colorChroma;
+extern COLORREF colorToggleBgOff;
+extern COLORREF colorToggleBgOn;
+extern COLORREF colorToggleCircle;
+extern COLORREF colorSidebarHover;
+extern COLORREF colorSidebarSelected;
 
 extern HBRUSH hBrushBg;
+extern HBRUSH hBrushSidebarBg;
 extern HBRUSH hBrushOverlayMuted;
 extern HBRUSH hBrushOverlayLive;
 extern HBRUSH hBrushMeterBg;
 extern HBRUSH hBrushChroma;
+extern HBRUSH hBrushSidebarHover;
+extern HBRUSH hBrushSidebarSelected;
 
 // Dragging
 extern bool isDragging;

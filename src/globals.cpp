@@ -30,20 +30,36 @@ float speakerLevelHistory[LEVEL_HISTORY_SIZE] = {0};
 int levelHistoryIndex = 0;
 
 // Color Definitions
-COLORREF colorBg = RGB(30, 30, 40);
-COLORREF colorText = RGB(220, 220, 230);
-COLORREF colorMuted = RGB(239, 68, 68);
-COLORREF colorLive = RGB(34, 197, 94);
+// Color Definitions
+// Modern Dark Theme
+COLORREF colorBg = RGB(32, 33, 36);        // Main content area (lighter dark)
+COLORREF colorSidebarBg = RGB(25, 26, 29); // Sidebar (darker)
+COLORREF colorText = RGB(232, 234, 237);   // High contrast text
+COLORREF colorTextDim = RGB(154, 160, 166);// Dimmed text
+COLORREF colorMuted = RGB(244, 67, 54);    // Material Red 500
+COLORREF colorLive = RGB(76, 175, 80);     // Material Green 500
 COLORREF colorOverlayBgMuted = RGB(180, 40, 40);
 COLORREF colorOverlayBgLive = RGB(30, 150, 60);
-COLORREF colorMeterBg = RGB(25, 25, 35);
+COLORREF colorMeterBg = RGB(20, 20, 20);
 COLORREF colorChroma = RGB(255, 0, 255); // Magenta
 
+// Toggle Switch Colors
+COLORREF colorToggleBgOff = RGB(80, 80, 80);
+COLORREF colorToggleBgOn = RGB(76, 175, 80);
+COLORREF colorToggleCircle = RGB(255, 255, 255);
+
+// Sidebar Interaction
+COLORREF colorSidebarHover = RGB(45, 46, 50);
+COLORREF colorSidebarSelected = RGB(55, 56, 60);
+
 HBRUSH hBrushBg;
+HBRUSH hBrushSidebarBg;
 HBRUSH hBrushOverlayMuted;
 HBRUSH hBrushOverlayLive;
 HBRUSH hBrushMeterBg;
 HBRUSH hBrushChroma;
+HBRUSH hBrushSidebarHover;
+HBRUSH hBrushSidebarSelected;
 
 bool isDragging = false;
 POINT dragStart;
