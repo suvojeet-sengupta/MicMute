@@ -84,7 +84,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = NULL; // Required for Mica
+    wc.hbrBackground = hBrushBg; // Restore Dark Background
     wc.lpszClassName = "MicMuteS_Class";
     wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
     RegisterClassEx(&wc);
@@ -274,9 +274,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             UpdateControlVisibility();
             break;
         }
-
-        case WM_ERASEBKGND:
-            return 1; // Prevent flickering for Mica
 
         case WM_PAINT: {
             PAINTSTRUCT ps;

@@ -67,7 +67,7 @@ void DrawToggle(LPDRAWITEMSTRUCT lpDrawItem) {
     else if (id == ID_SHOW_NOTIFICATIONS) isChecked = showNotifications;
     
     // Clear Background
-    // FillRect(hdc, &rc, hBrushBg); // Commented out for Mica transparency
+    FillRect(hdc, &rc, hBrushBg); // Restored for visibility
     
     // Calculate Toggle Switch Area
     RECT rcSwitch;
