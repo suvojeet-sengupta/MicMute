@@ -71,6 +71,29 @@ void UpdateRecorderUI(HWND hWnd) {
     }
 }
 
+void LayoutRecorderUI(HWND hWnd) {
+    RECT rect;
+    GetClientRect(hWnd, &rect);
+    int newW = rect.right - rect.left;
+    int newH = rect.bottom - rect.top;
+    float scale = GetWindowScale(hWnd);
+
+    int btnW = (int)(100 * scale);
+    int btnH = (int)(36 * scale);
+    int margin = (int)(20 * scale);
+    int startY = newH - btnH - margin;
+
+    HWND hBtnStart = GetDlgItem(hWnd, BTN_START_PAUSE);
+    HWND hBtnStop = GetDlgItem(hWnd, BTN_STOP_SAVE);
+    
+    if (hBtnStart) {
+        MoveWindow(hBtnStart, margin, startY, btnW, btnH, TRUE);
+    }
+    if (hBtnStop) {
+        MoveWindow(hBtnStop, newW - btnW - margin, startY, btnW, btnH, TRUE);
+    }
+}
+
 // Include for timestamp
 #include <ctime>
 #include <iomanip>
@@ -109,8 +132,8 @@ void CreateRecorderWindow(HINSTANCE hInstance) {
         SendMessage(hBtn2, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
         EnableWindow(hBtn2, FALSE);
 
-        // Force a resize to layout buttons
-        SetWindowPos(hRecorderWnd, NULL, 0, 0, w, h, SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED);
+        // Perform initial layout
+        LayoutRecorderUI(hRecorderWnd);
 
         ShowWindow(hRecorderWnd, SW_SHOW);
         UpdateWindow(hRecorderWnd);
@@ -135,24 +158,7 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             return (LRESULT)hBrushBg;
             
         case WM_SIZE: {
-            int newW = LOWORD(lParam);
-            int newH = HIWORD(lParam);
-            float scale = GetWindowScale(hWnd);
-
-            int btnW = (int)(100 * scale);
-            int btnH = (int)(36 * scale);
-            int margin = (int)(20 * scale);
-            int startY = newH - btnH - margin;
-
-            HWND hBtnStart = GetDlgItem(hWnd, BTN_START_PAUSE);
-            HWND hBtnStop = GetDlgItem(hWnd, BTN_STOP_SAVE);
-            
-            if (hBtnStart) {
-                MoveWindow(hBtnStart, margin, startY, btnW, btnH, TRUE);
-            }
-            if (hBtnStop) {
-                MoveWindow(hBtnStop, newW - btnW - margin, startY, btnW, btnH, TRUE);
-            }
+            LayoutRecorderUI(hWnd);
             // Repaint
             InvalidateRect(hWnd, NULL, TRUE);
             break; 
@@ -235,14 +241,20 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             // Draw Status Text
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, colorText);
-            SelectObject(hdc, hFontSmall);
+            SelectObject(hdc, hFontStatus); // Using hFontStatus for status
             
-            RECT textRect = {10, 60, 190, 80};
+            // Dynamically calculate centering
+            // We want it above the buttons, roughly middle of the remaining space
+            float scale = GetWindowScale(hWnd);
+            int btnAreaHeight = (int)(36 * scale + 40 * scale); // Button height + margins
+            RECT textRect = rect;
+            textRect.bottom -= btnAreaHeight; // Leave room for buttons
+            
             if (recorder.IsRecording()) {
-                if (recorder.IsPaused()) DrawText(hdc, "PAUSED", -1, &textRect, DT_CENTER);
-                else DrawText(hdc, "RECORDING...", -1, &textRect, DT_CENTER);
+                if (recorder.IsPaused()) DrawText(hdc, "PAUSED", -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                else DrawText(hdc, "RECORDING...", -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             } else {
-                DrawText(hdc, "Ready", -1, &textRect, DT_CENTER);
+                DrawText(hdc, "Ready", -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             }
             
             EndPaint(hWnd, &ps);
