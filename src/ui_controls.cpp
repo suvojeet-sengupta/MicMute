@@ -30,27 +30,39 @@ void DrawSidebarItem(HDC hdc, int index, const char* text, int selectedTab, int 
     bool isSelected = (index == selectedTab);
     bool isHover = (index == hoverTab);
     
-    // Background
+    // Windows 11 Style: Rounded Selection/Hover Indicator
+    // We want a little padding so it doesn't touch edges
+    RECT rcBg = rcItem;
+    rcBg.left += 4;
+    rcBg.right -= 4;
+    rcBg.top += 2;
+    rcBg.bottom -= 2;
+
     if (isSelected) {
-        FillRect(hdc, &rcItem, hBrushSidebarSelected);
-        // Draw Accent Line on Left
-        RECT rcAccent = rcItem;
-        rcAccent.right = 4;
-        HBRUSH hAccent = CreateSolidBrush(colorLive); // Use green accent
-        FillRect(hdc, &rcAccent, hAccent);
-        DeleteObject(hAccent);
+        DrawRoundedRect(hdc, rcBg, 4, colorSidebarSelected);
+        
+        // Indicator Line is usually not present in Win11 Settings in the same way, 
+        // but let's add a small vertical accent on the left *inside* the selection area or just rely on color
+        // Let's rely on the background color change + accent colored text or icon. 
+        // For mic mute, let's keep it simple: just the background highlight.
+        // Actually, let's add a small colored pill on the left for clarity if user wants.
+        // For now, clean rounded rect is best.
     } else if (isHover) {
-        FillRect(hdc, &rcItem, hBrushSidebarHover);
+        DrawRoundedRect(hdc, rcBg, 4, colorSidebarHover);
     }
     
     // Text
     SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, isSelected ? colorText : (isHover ? colorText : colorTextDim));
-    SelectObject(hdc, hFontNormal);
+    // If selected, use accent color or white? Win 11 keeps it white/text color but bolder.
+    // Let's stick to White for improved contrast on dark.
+    SetTextColor(hdc, isSelected ? RGB(255, 255, 255) : (isHover ? RGB(240, 240, 240) : colorTextDim));
+    
+    // Font: Bold if selected
+    SelectObject(hdc, isSelected ? hFontStatus : hFontNormal); // Re-using hFontStatus as it's SemiBold/Bold-ish
     
     // Center Text Vertically, Left Align with Padding
     RECT rcText = rcItem;
-    rcText.left += 15;
+    rcText.left += 16;
     DrawText(hdc, text, -1, &rcText, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
 }
 
@@ -66,29 +78,47 @@ void DrawToggle(LPDRAWITEMSTRUCT lpDrawItem) {
     else if (id == ID_SHOW_RECORDER) isChecked = showRecorder;
     else if (id == ID_SHOW_NOTIFICATIONS) isChecked = showNotifications;
     
-    // Clear Background
-    FillRect(hdc, &rc, hBrushBg); // Restored for visibility
+    // Clear Background with parent background color (or let it be transparent if we handled WM_CTLCOLORBTN correctly)
+    // Since we owner draw, we must fill.
+    FillRect(hdc, &rc, hBrushBg); 
     
     // Calculate Toggle Switch Area
+    // Windows 11 Toggles are wider and pill shaped
+    // Width ~ 40px, Height ~ 20px
     RECT rcSwitch;
-    rcSwitch.left = rc.left;
+    rcSwitch.left = rc.left; // Aligned left
     rcSwitch.top = rc.top + (rc.bottom - rc.top - TOGGLE_HEIGHT) / 2;
     rcSwitch.right = rcSwitch.left + TOGGLE_WIDTH;
     rcSwitch.bottom = rcSwitch.top + TOGGLE_HEIGHT;
     
+    // Draw Track (Pill)
+    // On: Accent Color (Solid)
+    // Off: Border with transparent/dark fill OR solid dark grey. Win11 dark mode uses solid dark grey.
+    
+    COLORREF trackColor = isChecked ? colorToggleBgOn : colorToggleBgOff;
+    COLORREF thumbColor = isChecked ? RGB(20, 20, 20) : RGB(200, 200, 200); // Win11 Dark Mode: Thumb is dark when on (contrast) or white?
+    // Correction: Win11 Dark Mode Toggle:
+    // ON: Accent Color Background, White Thumb (usually) or Black Thumb. Default standard is White/Light thumb on Accent.
+    // OFF: Dark Grey Background, Light Grey Thumb.
+    
+    thumbColor = isChecked ? RGB(255, 255, 255) : RGB(200, 200, 200); // Let's keep thumb light
+    if (isChecked) trackColor = colorToggleBgOn; // Accent
+    else trackColor = colorToggleBgOff; // Dark Grey
+    
     // Draw Track
-    DrawRoundedRect(hdc, rcSwitch, TOGGLE_HEIGHT, isChecked ? colorToggleBgOn : colorToggleBgOff);
+    DrawRoundedRect(hdc, rcSwitch, TOGGLE_HEIGHT, trackColor);
     
     // Draw Thumb (Circle)
-    int circleSize = TOGGLE_HEIGHT - 4;
-    int circleX = isChecked ? (rcSwitch.right - 2 - circleSize) : (rcSwitch.left + 2);
-    int circleY = rcSwitch.top + 2;
+    int circleSize = TOGGLE_HEIGHT - 6; // slightly smaller than height
+    int circleX = isChecked ? (rcSwitch.right - 3 - circleSize) : (rcSwitch.left + 3);
+    int circleY = rcSwitch.top + 3;
+    
     RECT rcCircle = {circleX, circleY, circleX + circleSize, circleY + circleSize};
-    DrawRoundedRect(hdc, rcCircle, circleSize, colorToggleCircle);
+    DrawRoundedRect(hdc, rcCircle, circleSize, thumbColor);
     
     // Draw Label
     RECT rcLabel = rc;
-    rcLabel.left += TOGGLE_WIDTH + 10;
+    rcLabel.left += TOGGLE_WIDTH + 12; // Gap
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, colorText);
     SelectObject(hdc, hFontNormal);

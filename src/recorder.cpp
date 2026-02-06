@@ -62,6 +62,11 @@ void UpdateRecorderUI(HWND hWnd) {
     }
 }
 
+// Include for timestamp
+#include <ctime>
+#include <iomanip>
+#include <sstream>
+
 void CreateRecorderWindow(HINSTANCE hInstance) {
     int x, y;
     LoadRecorderPosition(&x, &y);
@@ -69,24 +74,34 @@ void CreateRecorderWindow(HINSTANCE hInstance) {
     // Scale factor
     float scale = GetWindowScale(NULL);
     
+    // Larger, Modern Window
+    int w = (int)(320 * scale);
+    int h = (int)(180 * scale);
+    
     hRecorderWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
         "MicMuteS_Recorder", "Call Recorder", WS_POPUP | WS_CAPTION | WS_SYSMENU,
-        x, y, (int)(200 * scale), (int)(100 * scale),
+        x, y, w, h,
         NULL, NULL, hInstance, NULL
     );
     
     if (hRecorderWnd) {
-        // Set opacity
-        SetLayeredWindowAttributes(hRecorderWnd, 0, 240, LWA_ALPHA);
+        // Set opacity (High opacity for usability)
+        SetLayeredWindowAttributes(hRecorderWnd, 0, 250, LWA_ALPHA);
         
         // Buttons
-        HWND hBtn = CreateWindow("BUTTON", "Start", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 
-            (int)(10 * scale), (int)(10 * scale), (int)(80 * scale), (int)(40 * scale), hRecorderWnd, (HMENU)BTN_START_PAUSE, hInstance, NULL);
+        // Center them?
+        int btnW = (int)(100 * scale);
+        int btnH = (int)(36 * scale);
+        int margin = (int)(20 * scale);
+        int startY = h - btnH - margin;
+        
+        HWND hBtn = CreateWindow("BUTTON", "Start", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_FLAT, 
+            margin, startY, btnW, btnH, hRecorderWnd, (HMENU)BTN_START_PAUSE, hInstance, NULL);
         SendMessage(hBtn, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
 
-        HWND hBtn2 = CreateWindow("BUTTON", "Stop/Save", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 
-            (int)(110 * scale), (int)(10 * scale), (int)(80 * scale), (int)(40 * scale), hRecorderWnd, (HMENU)BTN_STOP_SAVE, hInstance, NULL);
+        HWND hBtn2 = CreateWindow("BUTTON", "Stop/Save", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_FLAT, 
+            w - btnW - margin, startY, btnW, btnH, hRecorderWnd, (HMENU)BTN_STOP_SAVE, hInstance, NULL);
         SendMessage(hBtn2, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
         EnableWindow(hBtn2, FALSE);
 
@@ -95,13 +110,14 @@ void CreateRecorderWindow(HINSTANCE hInstance) {
     }
 }
 
-void ShowRecorderWindow(bool show) {
-    if (show) {
-        if (!hRecorderWnd) CreateRecorderWindow(GetModuleHandle(NULL));
-        else ShowWindow(hRecorderWnd, SW_SHOW);
-    } else {
-        if (hRecorderWnd) ShowWindow(hRecorderWnd, SW_HIDE);
-    }
+// ... helper for timestamp ...
+std::string GetTimestampedFilename() {
+    auto t = std::time(nullptr);
+    struct tm tm;
+    localtime_s(&tm, &t);
+    std::ostringstream oss;
+    oss << "Recording_" << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".wav";
+    return oss.str();
 }
 
 LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -137,7 +153,10 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                 
                 // Save Dialog
                 OPENFILENAME ofn;
-                char szFile[260] = "recording.wav";
+                char szFile[260]; 
+                std::string defaultName = GetTimestampedFilename();
+                strcpy_s(szFile, defaultName.c_str());
+                
                 ZeroMemory(&ofn, sizeof(ofn));
                 ofn.lStructSize = sizeof(ofn);
                 ofn.hwndOwner = hWnd;
@@ -155,8 +174,7 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                         MessageBox(hWnd, "Failed to write file associated data.", "Error", MB_ICONERROR);
                     }
                 } else {
-                   // User cancelled save. The buffer is still there until they click Start again.
-                   // Optionally we could auto-clear or keep it. Current logic keeps it until next start.
+                   // User cancelled save.
                 }
                 
                 UpdateRecorderUI(hWnd);

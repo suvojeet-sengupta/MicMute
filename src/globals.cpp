@@ -33,25 +33,26 @@ int levelHistoryIndex = 0;
 // Color Definitions
 // Color Definitions
 // Modern Dark Theme
-COLORREF colorBg = RGB(32, 33, 36);        // Main content area (lighter dark)
-COLORREF colorSidebarBg = RGB(25, 26, 29); // Sidebar (darker)
-COLORREF colorText = RGB(232, 234, 237);   // High contrast text
-COLORREF colorTextDim = RGB(154, 160, 166);// Dimmed text
-COLORREF colorMuted = RGB(244, 67, 54);    // Material Red 500
-COLORREF colorLive = RGB(76, 175, 80);     // Material Green 500
-COLORREF colorOverlayBgMuted = RGB(180, 40, 40);
-COLORREF colorOverlayBgLive = RGB(30, 150, 60);
+// Modern Dark Theme (Windows 11 Style)
+COLORREF colorBg = RGB(32, 32, 32);         // Mica Fallback
+COLORREF colorSidebarBg = RGB(32, 32, 32);  // Transparent/Mica
+COLORREF colorText = RGB(255, 255, 255);    // Primary Text
+COLORREF colorTextDim = RGB(160, 160, 160); // Secondary Text
+COLORREF colorMuted = RGB(255, 69, 58);     // System Red
+COLORREF colorLive = RGB(48, 209, 88);      // System Green
+COLORREF colorOverlayBgMuted = RGB(50, 0, 0); // Darker Red for Overlay
+COLORREF colorOverlayBgLive = RGB(0, 50, 0);  // Darker Green for Overlay
 COLORREF colorMeterBg = RGB(20, 20, 20);
-COLORREF colorChroma = RGB(255, 0, 255); // Magenta
+COLORREF colorChroma = RGB(255, 0, 255);    // Magenta
 
-// Toggle Switch Colors
-COLORREF colorToggleBgOff = RGB(80, 80, 80);
-COLORREF colorToggleBgOn = RGB(76, 175, 80);
-COLORREF colorToggleCircle = RGB(255, 255, 255);
+// Toggle Switch & Controls
+COLORREF colorToggleBgOff = RGB(60, 60, 60);
+COLORREF colorToggleBgOn = RGB(96, 205, 255); // System Accent (Blue)
+COLORREF colorToggleCircle = RGB(255, 255, 255); // Thumb
 
 // Sidebar Interaction
-COLORREF colorSidebarHover = RGB(45, 46, 50);
-COLORREF colorSidebarSelected = RGB(55, 56, 60);
+COLORREF colorSidebarHover = RGB(55, 55, 55);    // Subtle highlight
+COLORREF colorSidebarSelected = RGB(70, 70, 70); // Stronger highlight
 
 HBRUSH hBrushBg;
 HBRUSH hBrushSidebarBg;

@@ -229,8 +229,25 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 // Helper to draw a single channel waveform
 void DrawWaveform(HDC hdc, RECT rect, float* history, int historyIndex, bool isMuted, COLORREF colorLow, COLORREF colorHigh) {
     int centerY = (rect.bottom + rect.top) / 2;
-    int maxHalfHeight = (rect.bottom - rect.top) / 2 - 2;
+    int height = rect.bottom - rect.top;
+    int maxHalfHeight = height / 2 - 2;
     
+    // Draw Grid (dB lines)
+    HPEN gridPen = CreatePen(PS_DOT, 1, RGB(40, 40, 50));
+    SelectObject(hdc, gridPen);
+    // Draw lines at 25%, 50%, 75% amplitude
+    int y0 = centerY;
+    int y1 = centerY - maxHalfHeight / 2;
+    int y2 = centerY + maxHalfHeight / 2;
+    // Actually, let's draw simpler horizontal grid lines
+    // -6dB, -12dB, -24dB lines?
+    // Map -6dB -> 0.5 amplitude roughly
+    
+    // Just draw a center line
+    MoveToEx(hdc, rect.left, centerY, NULL);
+    LineTo(hdc, rect.right, centerY);
+    DeleteObject(gridPen);
+
     float stepX = (float)(rect.right - rect.left - 4) / (float)(LEVEL_HISTORY_SIZE - 1);
     int startX = rect.left + 2;
 
@@ -238,45 +255,55 @@ void DrawWaveform(HDC hdc, RECT rect, float* history, int historyIndex, bool isM
         int bufferIdx = (historyIndex + i) % LEVEL_HISTORY_SIZE;
         float rawLevel = history[bufferIdx];
         
-        // Logarithmic Scaling
+        // Improved Logarithmic Scaling
+        // Target: Show smallest sounds. Floor at -96dB (16-bit silence essentially)
         float displayLevel = 0.0f;
-        if (rawLevel > 0.000001f) {
+        float minDb = -96.0f;
+        
+        if (rawLevel > 0.0f) {
             float db = 20.0f * log10f(rawLevel);
-            // Map -60dB -> 0.0, 0dB -> 1.0
-            displayLevel = (db + 60.0f) / 60.0f;
+            if (db < minDb) db = minDb;
+            
+            // Normalize 0..1
+            // (-96 -> 0, 0 -> 1)
+            float normalized = (db - minDb) / (0.0f - minDb);
+            
+            // Apply Power curve to boost lower levels visually
+            // display = pow(normalized, 0.7) -> Makes 0.2 input become 0.32 (boosted)
+            displayLevel = powf(normalized, 0.75f);
         }
+        
         if (displayLevel < 0.0f) displayLevel = 0.0f;
         if (displayLevel > 1.0f) displayLevel = 1.0f;
         
         if (isMuted) displayLevel = 0.0f;
 
         int halfHeight = (int)(displayLevel * maxHalfHeight);
-        if (halfHeight < 1) halfHeight = 1;
+        if (halfHeight < 1) halfHeight = 0; // Allow 0 for silence
 
-        // Color Logic
+        // Color Logic with smoother gradient
         int r, g, b;
-        if (displayLevel < 0.5f) {
-            // Low -> Mid
-            r = (int)(GetRValue(colorLow) + (GetRValue(colorHigh) - GetRValue(colorLow)) * displayLevel * 2.0f);
-            g = (int)(GetGValue(colorLow) + (GetGValue(colorHigh) - GetGValue(colorLow)) * displayLevel * 2.0f);
-            b = (int)(GetBValue(colorLow) + (GetBValue(colorHigh) - GetBValue(colorLow)) * displayLevel * 2.0f);
-        } else {
-            // Mid -> High (Red)
-            r = (int)(GetRValue(colorHigh) + (255 - GetRValue(colorHigh)) * (displayLevel - 0.5f) * 2.0f);
-            g = (int)(GetGValue(colorHigh) + (0 - GetGValue(colorHigh)) * (displayLevel - 0.5f) * 2.0f);
-            b = (int)(GetBValue(colorHigh) + (0 - GetBValue(colorHigh)) * (displayLevel - 0.5f) * 2.0f);
-        }
+        // Interpolate between Low and High based on displayLevel
+        r = (int)(GetRValue(colorLow) + (GetRValue(colorHigh) - GetRValue(colorLow)) * displayLevel);
+        g = (int)(GetGValue(colorLow) + (GetGValue(colorHigh) - GetGValue(colorLow)) * displayLevel);
+        b = (int)(GetBValue(colorLow) + (GetBValue(colorHigh) - GetBValue(colorLow)) * displayLevel);
 
         COLORREF col = RGB(r, g, b);
-        if (isMuted) col = RGB(50, 50, 50);
+        if (isMuted) col = RGB(40, 40, 40);
 
-        HPEN linePen = CreatePen(PS_SOLID, 1, col);
-        SelectObject(hdc, linePen);
+        // Use a rectangle/bar instead of a line for "Solid" look? 
+        // Or thick lines. History view usually implies lines.
+        // Let's stick to lines but maybe cleaner.
+        HPEN linePen = CreatePen(PS_SOLID, 1, col); // Width 2 for better visibility?
+        HPEN oldPen = (HPEN)SelectObject(hdc, linePen);
         
         int x = startX + (int)(i * stepX);
+        
+        // Draw mirrored bar around center
         MoveToEx(hdc, x, centerY - halfHeight, NULL);
         LineTo(hdc, x, centerY + halfHeight);
         
+        SelectObject(hdc, oldPen);
         DeleteObject(linePen);
     }
 }

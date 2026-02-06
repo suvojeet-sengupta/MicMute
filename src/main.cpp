@@ -121,8 +121,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     RegisterClassEx(&wcRec);
 
     // Window size (Wider for sidebar)
-    int width = 600; 
-    int height = 500; 
+    int width = 850; 
+    int height = 600; 
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
     int x = (screenW - width) / 2;
@@ -234,7 +234,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             
             // Status Label (Top Right Area)
              CreateWindow("STATIC", "Checking...", WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                SIDEBAR_WIDTH, 30, 600 - SIDEBAR_WIDTH, 40, hWnd, (HMENU)ID_STATUS_LABEL, hInst, NULL);
+                SIDEBAR_WIDTH, 30, 850 - SIDEBAR_WIDTH, 40, hWnd, (HMENU)ID_STATUS_LABEL, hInst, NULL);
 
             // -- GENERAL TAB TOGGLES --
             // Positioned in the content area (Right of Sidebar)
@@ -268,8 +268,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SendMessage(hNotifyCheck, BM_SETCHECK, showNotifications ? BST_CHECKED : BST_UNCHECKED, 0);
 
             // Footer
+            RECT rcClient; GetClientRect(hWnd, &rcClient); // Note: Client Rect not available in CREATE? Width is known though.
             CreateWindow("STATIC", "by Suvojeet Sengupta", 
-                 WS_VISIBLE | WS_CHILD | SS_RIGHT, 600 - 160, 440, 140, 20, hWnd, NULL, hInst, NULL);
+                 WS_VISIBLE | WS_CHILD | SS_RIGHT, 850 - 160, 600 - 60, 140, 20, hWnd, NULL, hInst, NULL);
 
             UpdateControlVisibility();
             break;

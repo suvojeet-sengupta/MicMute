@@ -3,7 +3,7 @@
 #include <string>
 
 // UI Constants
-#define SIDEBAR_WIDTH 120
+#define SIDEBAR_WIDTH 250
 #define SIDEBAR_ITEM_HEIGHT 50
 #define TOGGLE_WIDTH 40
 #define TOGGLE_HEIGHT 20
