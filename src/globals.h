@@ -32,6 +32,7 @@ extern int overlayOpacity;
 // Level history for waveform
 #define LEVEL_HISTORY_SIZE 60
 extern float levelHistory[LEVEL_HISTORY_SIZE];
+extern float speakerLevelHistory[LEVEL_HISTORY_SIZE];
 extern int levelHistoryIndex;
 
 // Colors

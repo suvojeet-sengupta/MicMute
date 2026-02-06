@@ -26,6 +26,7 @@ HICON hIconMicOff = NULL;
 int overlayOpacity = 220;
 
 float levelHistory[LEVEL_HISTORY_SIZE] = {0};
+float speakerLevelHistory[LEVEL_HISTORY_SIZE] = {0};
 int levelHistoryIndex = 0;
 
 // Color Definitions

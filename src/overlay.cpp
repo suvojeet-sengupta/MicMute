@@ -4,7 +4,7 @@
 #include "audio.h"
 #include "ui.h"
 #include <dwmapi.h>
-#include <cmath> // for abs
+#include <cmath> // for abs, log10f
 
 // Animation state
 static float animProgress = 0.0f; // 0.0 = Live, 1.0 = Muted
@@ -41,12 +41,14 @@ void CreateMeterWindow(HINSTANCE hInstance) {
     
     // Explicitly zero-out history to prevent visual glitches on startup
     memset(levelHistory, 0, sizeof(levelHistory));
+    memset(speakerLevelHistory, 0, sizeof(speakerLevelHistory));
     levelHistoryIndex = 0;
     
+    // Increased height to 100 to accommodate dual meters (Advisor + CX)
     hMeterWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
         "MicMuteS_Meter", NULL, WS_POPUP,
-        meterX, meterY, 180, 50,
+        meterX, meterY, 180, 100, 
         NULL, NULL, hInstance, NULL
     );
     
@@ -76,9 +78,13 @@ void UpdateOverlay() {
 
 void UpdateMeter() {
     if (hMeterWnd && IsWindowVisible(hMeterWnd)) {
-        // Get current level
-        float level = GetMicLevel();
-        levelHistory[levelHistoryIndex] = level;
+        // Get current levels
+        float micLevel = GetMicLevel();
+        float spkLevel = GetSpeakerLevel();
+        
+        levelHistory[levelHistoryIndex] = micLevel;
+        speakerLevelHistory[levelHistoryIndex] = spkLevel;
+        
         levelHistoryIndex = (levelHistoryIndex + 1) % LEVEL_HISTORY_SIZE;
         
         InvalidateRect(hMeterWnd, NULL, TRUE);
@@ -192,6 +198,61 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
 }
 
+// Helper to draw a single channel waveform
+void DrawWaveform(HDC hdc, RECT rect, float* history, int historyIndex, bool isMuted, COLORREF colorLow, COLORREF colorHigh) {
+    int centerY = (rect.bottom + rect.top) / 2;
+    int maxHalfHeight = (rect.bottom - rect.top) / 2 - 2;
+    
+    float stepX = (float)(rect.right - rect.left - 4) / (float)(LEVEL_HISTORY_SIZE - 1);
+    int startX = rect.left + 2;
+
+    for (int i = 0; i < LEVEL_HISTORY_SIZE; i++) {
+        int bufferIdx = (historyIndex + i) % LEVEL_HISTORY_SIZE;
+        float rawLevel = history[bufferIdx];
+        
+        // Logarithmic Scaling
+        float displayLevel = 0.0f;
+        if (rawLevel > 0.000001f) {
+            float db = 20.0f * log10f(rawLevel);
+            // Map -60dB -> 0.0, 0dB -> 1.0
+            displayLevel = (db + 60.0f) / 60.0f;
+        }
+        if (displayLevel < 0.0f) displayLevel = 0.0f;
+        if (displayLevel > 1.0f) displayLevel = 1.0f;
+        
+        if (isMuted) displayLevel = 0.0f;
+
+        int halfHeight = (int)(displayLevel * maxHalfHeight);
+        if (halfHeight < 1) halfHeight = 1;
+
+        // Color Logic
+        int r, g, b;
+        if (displayLevel < 0.5f) {
+            // Low -> Mid
+            r = (int)(GetRValue(colorLow) + (GetRValue(colorHigh) - GetRValue(colorLow)) * displayLevel * 2.0f);
+            g = (int)(GetGValue(colorLow) + (GetGValue(colorHigh) - GetGValue(colorLow)) * displayLevel * 2.0f);
+            b = (int)(GetBValue(colorLow) + (GetBValue(colorHigh) - GetBValue(colorLow)) * displayLevel * 2.0f);
+        } else {
+            // Mid -> High (Red)
+            r = (int)(GetRValue(colorHigh) + (255 - GetRValue(colorHigh)) * (displayLevel - 0.5f) * 2.0f);
+            g = (int)(GetGValue(colorHigh) + (0 - GetGValue(colorHigh)) * (displayLevel - 0.5f) * 2.0f);
+            b = (int)(GetBValue(colorHigh) + (0 - GetBValue(colorHigh)) * (displayLevel - 0.5f) * 2.0f);
+        }
+
+        COLORREF col = RGB(r, g, b);
+        if (isMuted) col = RGB(50, 50, 50);
+
+        HPEN linePen = CreatePen(PS_SOLID, 1, col);
+        SelectObject(hdc, linePen);
+        
+        int x = startX + (int)(i * stepX);
+        MoveToEx(hdc, x, centerY - halfHeight, NULL);
+        LineTo(hdc, x, centerY + halfHeight);
+        
+        DeleteObject(linePen);
+    }
+}
+
 LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_PAINT: {
@@ -210,89 +271,39 @@ LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             RoundRect(hdc, 0, 0, rect.right, rect.bottom, 8, 8);
             DeleteObject(borderPen);
             
-            int centerY = (rect.bottom - rect.top) / 2;
-            int availHeight = rect.bottom - rect.top - 4; // padding
-            int maxHalfHeight = availHeight / 2;
+            // Split area into top (Advisor) and bottom (CX)
+            int halfHeight = rect.bottom / 2;
             
-            bool muted = IsDefaultMicMuted();
-            int numSamples = LEVEL_HISTORY_SIZE;
+            RECT rectAdvisor = { 0, 0, rect.right, halfHeight };
+            RECT rectCX = { 0, halfHeight, rect.right, rect.bottom };
             
-            // Draw waveform
-            // We draw vertical lines for each history sample
-            // Spacing depends on window width and history size.
-            // For smoother look, we might draw fewer lines if window is small, 
-            // but here we just map 1:1 or similarly.
+            // Draw Labels
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(180, 180, 180));
+            SelectObject(hdc, hFontSmall);
             
-            float stepX = (float)(rect.right - rect.left - 16) / (float)(numSamples - 1);
-            int startX = 8;
-
-            for (int i = 0; i < numSamples; i++) {
-                // Determine which sample to draw at this horizontal position (i)
-                // We want: 
-                // i = 0 (Left side)  -> Oldest sample
-                // i = max (Right side) -> Newest sample
-                //
-                // levelHistoryIndex points to the NEXT insert position, which effectively holds the OLDEST sample (circularly).
-                // So levelHistoryIndex + 0 is the Oldest.
-                // levelHistoryIndex + (numSamples-1) is the Newest.
-                
-                int bufferIdx = (levelHistoryIndex + i) % numSamples;
-                
-                float rawLevel = levelHistory[bufferIdx];
-                
-                // Logarithmic Scaling (dB)
-                // Range: -60dB -> 0dB mapped to 0.0 -> 1.0
-                float displayLevel = 0.0f;
-                if (rawLevel > 0.000001f) { // Avoid log(0)
-                    float db = 20.0f * log10f(rawLevel);
-                    // Map -60 to 0 -> 0 to 1
-                    // db = -60 => 0
-                    // db = 0 => 1
-                     displayLevel = (db + 60.0f) / 60.0f;
-                }
-                if (displayLevel < 0.0f) displayLevel = 0.0f;
-                if (displayLevel > 1.0f) displayLevel = 1.0f;
-                
-                if (muted) displayLevel = 0.0f;
-
-                // Calculate Bar Height
-                int halfHeight = (int)(displayLevel * maxHalfHeight);
-                if (halfHeight < 1) halfHeight = 1; // Minimum visualization (center line)
-
-                // Color Logic (Gradient)
-                // Low(0.0) -> Green, Mid(0.7) -> Yellow, Hi(1.0) -> Red
-                int r = 0, g = 255, b = 0;
-                if (displayLevel < 0.5f) {
-                    // Green to Yellow
-                    // 0.0: 0,255,0
-                    // 0.5: 255,255,0
-                    r = (int)(displayLevel * 2.0f * 255.0f);
-                    g = 255;
-                } else {
-                    // Yellow to Red
-                    // 0.5: 255,255,0
-                    // 1.0: 255,0,0
-                    r = 255;
-                    g = 255 - (int)((displayLevel - 0.5f) * 2.0f * 255.0f);
-                }
-                
-                // Dim if very old sample? No, standard view is uniform brightness.
-                
-                COLORREF col = RGB(r, g, b);
-                if (muted) col = RGB(50, 50, 50);
-
-                HPEN linePen = CreatePen(PS_SOLID, 1, col); // Thicker lines? 1px is fine for 128 samples in 180px width
-                
-                // Draw Vertical Line centered
-                int x = startX + (int)(i * stepX);
-                
-                SelectObject(hdc, linePen);
-                MoveToEx(hdc, x, centerY - halfHeight, NULL);
-                LineTo(hdc, x, centerY + halfHeight);
-                
-                DeleteObject(linePen);
-            }
+            RECT labelAdvisor = rectAdvisor; 
+            labelAdvisor.left += 6; labelAdvisor.top += 2;
+            DrawText(hdc, "Advisor", -1, &labelAdvisor, DT_LEFT | DT_TOP | DT_SINGLELINE);
             
+            RECT labelCX = rectCX; 
+            labelCX.left += 6; labelCX.top += 2;
+            DrawText(hdc, "CX", -1, &labelCX, DT_LEFT | DT_TOP | DT_SINGLELINE);
+
+            // Draw Waveforms
+            // Advisor (Mic) - uses standard Green/Yellow colors (Live)
+            DrawWaveform(hdc, rectAdvisor, levelHistory, levelHistoryIndex, IsDefaultMicMuted(), RGB(0, 255, 0), RGB(255, 255, 0));
+            
+            // CX (Speaker) - uses Blue/Cyan scheme for distinction
+            DrawWaveform(hdc, rectCX, speakerLevelHistory, levelHistoryIndex, false, RGB(0, 200, 255), RGB(0, 100, 255));
+            
+            // Divider Line
+            HPEN divPen = CreatePen(PS_SOLID, 1, RGB(50, 50, 60));
+            SelectObject(hdc, divPen);
+            MoveToEx(hdc, 4, halfHeight, NULL);
+            LineTo(hdc, rect.right - 4, halfHeight);
+            DeleteObject(divPen);
+
             EndPaint(hWnd, &ps);
             return 0;
         }

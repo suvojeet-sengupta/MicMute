@@ -14,5 +14,6 @@ void SetMuteAll(bool mute);
 bool IsAnyMicMuted();
 bool IsDefaultMicMuted();
 float GetMicLevel();  // Returns 0.0 to 1.0 audio peak level
+float GetSpeakerLevel(); // Returns 0.0 to 1.0 speaker peak level
 
 #endif

@@ -70,8 +70,12 @@ private:
     SafeComPtr<IMMDeviceEnumerator> pEnumerator;
     SafeComPtr<IMMDevice> pDefaultDevice;
     SafeComPtr<IAudioMeterInformation> pMeterInfo;
+
+    SafeComPtr<IMMDevice> pSpeakerDevice;
+    SafeComPtr<IAudioMeterInformation> pSpeakerMeterInfo;
     
     std::atomic<float> currentPeakLevel;
+    std::atomic<float> currentSpeakerLevel;
     std::atomic<bool> isMutedGlobal;
     std::mutex deviceMutex;
     
@@ -86,54 +90,72 @@ private:
     }
 
     // Returns true if successful
-    bool UpdateDefaultDevice() {
+    bool UpdateDevices() {
         std::lock_guard<std::mutex> lock(deviceMutex);
         InitializeCOM();
         if (!pEnumerator) return false;
 
-        // Try to get default device
-        SafeComPtr<IMMDevice> pNewDevice;
-        HRESULT hr = pEnumerator->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pNewDevice);
+        // 1. MIC (Capture)
+        SafeComPtr<IMMDevice> pNewRecDevice;
+        HRESULT hr = pEnumerator->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pNewRecDevice);
         
-        if (FAILED(hr)) {
-            // Device might be lost
-            pDefaultDevice.Release();
-            pMeterInfo.Release();
-            return false;
+        if (SUCCEEDED(hr)) {
+            if (!pDefaultDevice) {
+                pDefaultDevice = pNewRecDevice.ptr;
+                pDefaultDevice.ptr->AddRef(); 
+            }
+            if (pDefaultDevice && !pMeterInfo) {
+                pDefaultDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pMeterInfo);
+            }
+        } else {
+             pDefaultDevice.Release();
+             pMeterInfo.Release();
         }
 
-        // Check if device changed (simple check: if we didn't have one before)
-        // ideally we check ID, but for now just ensure we have a valid pDevice
-        if (!pDefaultDevice) {
-            pDefaultDevice = pNewDevice.ptr;
-            pDefaultDevice.ptr->AddRef(); // Manually AddRef since we copied pointer
-        }
+        // 2. SPEAKER (Render)
+        SafeComPtr<IMMDevice> pNewRenderDevice;
+        hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &pNewRenderDevice);
         
-        // Refresh Meter Info if needed
-        if (pDefaultDevice && !pMeterInfo) {
-            pDefaultDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pMeterInfo);
+        if (SUCCEEDED(hr)) {
+            if (!pSpeakerDevice) {
+                pSpeakerDevice = pNewRenderDevice.ptr;
+                pSpeakerDevice.ptr->AddRef(); 
+            }
+            if (pSpeakerDevice && !pSpeakerMeterInfo) {
+                pSpeakerDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pSpeakerMeterInfo);
+            }
+        } else {
+             pSpeakerDevice.Release();
+             pSpeakerMeterInfo.Release();
         }
 
-        return (pDefaultDevice && pMeterInfo);
+        return (pDefaultDevice && pMeterInfo); // Return true if at least Mic works
     }
 
     void PollerLoop() {
         CoInitialize(NULL);
         while (!stopThread) {
-            if (UpdateDefaultDevice()) {
-                float peak = 0.0f;
-                // Thread-safe lock not strictly needed for just calling GetPeakValue 
-                // on a localized COM interface, but good practice if we swap pMeterInfo
-                std::lock_guard<std::mutex> lock(deviceMutex);
-                if (pMeterInfo) {
-                    pMeterInfo->GetPeakValue(&peak);
-                    if (peak < 0.0f) peak = 0.0f;
-                    if (peak > 1.0f) peak = 1.0f;
-                }
-                currentPeakLevel = peak;
-            } else {
-                currentPeakLevel = 0.0f;
+            UpdateDevices();
+            
+            float peak = 0.0f;
+            float speak = 0.0f;
+
+            std::lock_guard<std::mutex> lock(deviceMutex);
+            if (pMeterInfo) {
+                pMeterInfo->GetPeakValue(&peak);
+                if (peak < 0.0f) peak = 0.0f;
+                if (peak > 1.0f) peak = 1.0f;
             }
+            
+            if (pSpeakerMeterInfo) {
+                pSpeakerMeterInfo->GetPeakValue(&speak);
+                if (speak < 0.0f) speak = 0.0f;
+                if (speak > 1.0f) speak = 1.0f;
+            }
+
+            currentPeakLevel = peak;
+            currentSpeakerLevel = speak;
+            
             Sleep(16); // Poll every ~16ms (60fps)
         }
         
@@ -142,13 +164,15 @@ private:
             std::lock_guard<std::mutex> lock(deviceMutex);
             pMeterInfo.Release();
             pDefaultDevice.Release();
+            pSpeakerMeterInfo.Release();
+            pSpeakerDevice.Release();
             pEnumerator.Release();
         }
         CoUninitialize();
     }
 
 public:
-    AudioManager() : currentPeakLevel(0.0f), isMutedGlobal(false), stopThread(false) {}
+    AudioManager() : currentPeakLevel(0.0f), currentSpeakerLevel(0.0f), isMutedGlobal(false), stopThread(false) {}
 
     void Start() {
         stopThread = false;
@@ -164,6 +188,10 @@ public:
 
     float GetCurrentLevel() {
         return currentPeakLevel;
+    }
+
+    float GetCurrentSpeakerLevel() {
+        return currentSpeakerLevel;
     }
 
     bool GetMuteState() {
@@ -327,5 +355,10 @@ bool IsDefaultMicMuted() {
 
 float GetMicLevel() {
     if (g_Audio) return g_Audio->GetCurrentLevel();
+    return 0.0f;
+}
+
+float GetSpeakerLevel() {
+    if (g_Audio) return g_Audio->GetCurrentSpeakerLevel();
     return 0.0f;
 }
