@@ -3,6 +3,8 @@
 #include <iostream>
 #include <mmreg.h>
 #include <ksmedia.h>
+#include <functiondiscoverykeys_devpkey.h>
+#include <stdio.h>
 
 #pragma comment(lib, "ole32.lib")
 
@@ -75,8 +77,23 @@ void WasapiRecorder::RecordingLoop() {
                           __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
     if (FAILED(hr)) goto Exit;
 
-    hr = pEnumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &pDevice);
+    hr = pEnumerator->GetDefaultAudioEndpoint(eCapture, eMultimedia, &pDevice);
     if (FAILED(hr)) goto Exit;
+
+    // Log Device Name
+    {
+        IPropertyStore *pProps = NULL;
+        if (SUCCEEDED(pDevice->OpenPropertyStore(STGM_READ, &pProps))) {
+            PROPVARIANT varName; PropVariantInit(&varName);
+            if (SUCCEEDED(pProps->GetValue(PKEY_Device_FriendlyName, &varName))) {
+                char buffer[512];
+                snprintf(buffer, sizeof(buffer), "[WasapiRecorder] Recording Device: %ws\n", varName.pwszVal);
+                OutputDebugStringA(buffer);
+                PropVariantClear(&varName);
+            }
+            pProps->Release();
+        }
+    }
 
     // 2. Activate Audio Client
     hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&pAudioClient);
@@ -131,8 +148,11 @@ void WasapiRecorder::RecordingLoop() {
 
             if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
                 // Write silence
-                 // For now, we just skip or write 0s. 
-                 // To implement properly we'd push 0s.
+                 std::lock_guard<std::mutex> lock(bufferMutex);
+                 int bytesToCopy = numFramesAvailable * pwfx->nBlockAlign;
+                 size_t currentSize = audioBuffer.size();
+                 audioBuffer.resize(currentSize + bytesToCopy);
+                 memset(audioBuffer.data() + currentSize, 0, bytesToCopy);
             } else {
                 // Copy data
                 std::lock_guard<std::mutex> lock(bufferMutex);
@@ -179,7 +199,7 @@ void WasapiRecorder::WriteWavHeader(std::ofstream& file, int totalDataLen, int s
     if (pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
          WAVEFORMATEXTENSIBLE *pEx = (WAVEFORMATEXTENSIBLE*)pwfx;
          if (IsEqualGUID(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, pEx->SubFormat)) audioFormat = 3;
-         else audioFormat = 1;
+         else if (IsEqualGUID(KSDATAFORMAT_SUBTYPE_PCM, pEx->SubFormat)) audioFormat = 1;
     }
     
     file.write((char*)&audioFormat, 2);
