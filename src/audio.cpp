@@ -127,6 +127,8 @@ private:
                 std::lock_guard<std::mutex> lock(deviceMutex);
                 if (pMeterInfo) {
                     pMeterInfo->GetPeakValue(&peak);
+                    if (peak < 0.0f) peak = 0.0f;
+                    if (peak > 1.0f) peak = 1.0f;
                 }
                 currentPeakLevel = peak;
             } else {

@@ -29,6 +29,10 @@ void CreateMeterWindow(HINSTANCE hInstance) {
     int meterX, meterY;
     LoadMeterPosition(&meterX, &meterY);
     
+    // Explicitly zero-out history to prevent visual glitches on startup
+    memset(levelHistory, 0, sizeof(levelHistory));
+    levelHistoryIndex = 0;
+    
     hMeterWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
         "MicMuteS_Meter", NULL, WS_POPUP,
