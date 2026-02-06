@@ -120,6 +120,15 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                 if (!isRecording) {
                     // Start Recording
                     mciSendString("open new type waveaudio alias myrec", NULL, 0, NULL);
+                    
+                    // Configure High Quality (44.1kHz, 16-bit, Stereo)
+                    mciSendString("set myrec time format ms", NULL, 0, NULL);
+                    mciSendString("set myrec bitspersample 16", NULL, 0, NULL);
+                    mciSendString("set myrec samplespersec 44100", NULL, 0, NULL);
+                    mciSendString("set myrec channels 2", NULL, 0, NULL);
+                    mciSendString("set myrec bytespersec 176400", NULL, 0, NULL);
+                    mciSendString("set myrec alignment 4", NULL, 0, NULL);
+                    
                     mciSendString("record myrec", NULL, 0, NULL);
                     isRecording = true;
                     isPaused = false;

@@ -226,8 +226,8 @@ public:
                             // UNMUTE OPERATION
                             float savedVol = RegReadVolume(deviceId);
                             
-                            // Safety clamp: if not found or weird, default to 50%
-                            if (savedVol < 0.0f || savedVol > 1.0f) savedVol = 0.5f;
+                            // Safety clamp: if not found or weird, default to 100%
+                            if (savedVol < 0.0f || savedVol > 1.0f) savedVol = 1.0f;
                             
                             // Set Volume
                             pVolume->SetMasterVolumeLevelScalar(savedVol, NULL);
