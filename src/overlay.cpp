@@ -5,6 +5,8 @@
 #include "ui.h"
 #include <dwmapi.h>
 #include <cmath> // for abs, log10f
+#include <cstdio>
+#include <string>
 
 // Animation state
 static float animProgress = 0.0f; // 0.0 = Live, 1.0 = Muted
@@ -41,22 +43,25 @@ void CreateOverlayWindow(HINSTANCE hInstance) {
 }
 
 void CreateMeterWindow(HINSTANCE hInstance) {
-    int meterX, meterY;
-    LoadMeterPosition(&meterX, &meterY);
+    int meterX, meterY, meterW, meterH;
+    LoadMeterPosition(&meterX, &meterY, &meterW, &meterH);
     
     // Explicitly zero-out history to prevent visual glitches on startup
     memset(levelHistory, 0, sizeof(levelHistory));
     memset(speakerLevelHistory, 0, sizeof(speakerLevelHistory));
     levelHistoryIndex = 0;
     
-    // Scaled initially? We need window handle first usually, OR assume system DPI
+    // Scale factor
     float scale = GetWindowScale(NULL);
+    if (meterW < 100) meterW = (int)(180 * scale);
+    if (meterH < 50) meterH = (int)(100 * scale);
     
-    // Increased height to 100 to accommodate dual meters (Advisor + CX)
+    // Use WS_THICKFRAME for resizing support
     hMeterWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-        "MicMuteS_Meter", NULL, WS_POPUP,
-        meterX, meterY, (int)(180 * scale), (int)(100 * scale), 
+        "MicMuteS_Meter", NULL, 
+        WS_POPUP | WS_THICKFRAME,
+        meterX, meterY, meterW, meterH, 
         NULL, NULL, hInstance, NULL
     );
     
@@ -230,20 +235,11 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 void DrawWaveform(HDC hdc, RECT rect, float* history, int historyIndex, bool isMuted, COLORREF colorLow, COLORREF colorHigh) {
     int centerY = (rect.bottom + rect.top) / 2;
     int height = rect.bottom - rect.top;
-    int maxHalfHeight = height / 2 - 2;
+    int maxHalfHeight = height / 2 - 8; // Added more vertical padding (4px on each side)
     
     // Draw Grid (dB lines)
     HPEN gridPen = CreatePen(PS_DOT, 1, RGB(40, 40, 50));
     SelectObject(hdc, gridPen);
-    // Draw lines at 25%, 50%, 75% amplitude
-    int y0 = centerY;
-    int y1 = centerY - maxHalfHeight / 2;
-    int y2 = centerY + maxHalfHeight / 2;
-    // Actually, let's draw simpler horizontal grid lines
-    // -6dB, -12dB, -24dB lines?
-    // Map -6dB -> 0.5 amplitude roughly
-    
-    // Just draw a center line
     MoveToEx(hdc, rect.left, centerY, NULL);
     LineTo(hdc, rect.right, centerY);
     DeleteObject(gridPen);
@@ -255,21 +251,19 @@ void DrawWaveform(HDC hdc, RECT rect, float* history, int historyIndex, bool isM
         int bufferIdx = (historyIndex + i) % LEVEL_HISTORY_SIZE;
         float rawLevel = history[bufferIdx];
         
-        // Improved Logarithmic Scaling
         // Target: Show smallest sounds but avoid noise floor.
         float displayLevel = 0.0f;
-        float minDb = -72.0f; // More realistic for standard microphones
+        float minDb = -48.0f; // Significant noise floor reduction
         
         if (rawLevel > 0.0f) {
             float db = 20.0f * log10f(rawLevel);
             if (db < minDb) db = minDb;
             
             // Normalize 0..1
-            // (-72 -> 0, 0 -> 1)
             float normalized = (db - minDb) / (0.0f - minDb);
             
-            // Linear scaling is safer for noisy mics, but let's keep a mild boost
-            displayLevel = powf(normalized, 0.9f); 
+            // Linear scaling to prevent boosting noise
+            displayLevel = normalized; 
         }
         
         if (displayLevel < 0.0f) displayLevel = 0.0f;
@@ -309,6 +303,30 @@ void DrawWaveform(HDC hdc, RECT rect, float* history, int historyIndex, bool isM
 
 LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+        case WM_NCHITTEST: {
+            LRESULT hit = DefWindowProc(hWnd, msg, wParam, lParam);
+            if (hit == HTCLIENT) {
+                // Resize border implementation for borderless window
+                POINT pt; GetCursorPos(&pt);
+                RECT rc; GetWindowRect(hWnd, &rc);
+                int border = 8;
+                if (pt.x < rc.left + border && pt.y < rc.top + border) return HTTOPLEFT;
+                if (pt.x > rc.right - border && pt.y < rc.top + border) return HTTOPRIGHT;
+                if (pt.x < rc.left + border && pt.y > rc.bottom - border) return HTBOTTOMLEFT;
+                if (pt.x > rc.right - border && pt.y > rc.bottom - border) return HTBOTTOMRIGHT;
+                if (pt.x < rc.left + border) return HTLEFT;
+                if (pt.x > rc.right - border) return HTRIGHT;
+                if (pt.y < rc.top + border) return HTTOP;
+                if (pt.y > rc.bottom - border) return HTBOTTOM;
+                return HTCAPTION; // Allow drag
+            }
+            return hit;
+        }
+
+        case WM_EXITSIZEMOVE:
+            SaveMeterPosition();
+            break;
+
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hWnd, &ps);
@@ -336,19 +354,20 @@ LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             SetTextColor(hdc, RGB(180, 180, 180));
             SelectObject(hdc, hFontSmall);
             
+            std::wstring micName = GetMicDeviceName();
+            char micBuf[128];
+            sprintf_s(micBuf, "Advisor: %.20ls", micName.c_str());
+
             RECT labelAdvisor = rectAdvisor; 
             labelAdvisor.left += 6; labelAdvisor.top += 2;
-            DrawText(hdc, "Advisor", -1, &labelAdvisor, DT_LEFT | DT_TOP | DT_SINGLELINE);
+            DrawText(hdc, micBuf, -1, &labelAdvisor, DT_LEFT | DT_TOP | DT_SINGLELINE);
             
             RECT labelCX = rectCX; 
             labelCX.left += 6; labelCX.top += 2;
-            DrawText(hdc, "CX", -1, &labelCX, DT_LEFT | DT_TOP | DT_SINGLELINE);
+            DrawText(hdc, "Audio Output (CX)", -1, &labelCX, DT_LEFT | DT_TOP | DT_SINGLELINE);
 
             // Draw Waveforms
-            // Advisor (Mic) - uses standard Green/Yellow colors (Live)
             DrawWaveform(hdc, rectAdvisor, levelHistory, levelHistoryIndex, IsDefaultMicMuted(), RGB(0, 255, 0), RGB(255, 255, 0));
-            
-            // CX (Speaker) - uses Blue/Cyan scheme for distinction
             DrawWaveform(hdc, rectCX, speakerLevelHistory, levelHistoryIndex, false, RGB(0, 200, 255), RGB(0, 100, 255));
             
             // Divider Line
@@ -361,30 +380,6 @@ LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             EndPaint(hWnd, &ps);
             return 0;
         }
-        
-        case WM_LBUTTONDOWN:
-            isMeterDragging = true;
-            SetCapture(hWnd);
-            GetCursorPos(&meterDragStart);
-            RECT r; GetWindowRect(hWnd, &r);
-            meterDragStart.x -= r.left;
-            meterDragStart.y -= r.top;
-            return 0;
-        
-        case WM_MOUSEMOVE:
-            if (isMeterDragging) {
-                POINT pt; GetCursorPos(&pt);
-                SetWindowPos(hWnd, NULL, pt.x - meterDragStart.x, pt.y - meterDragStart.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-            }
-            return 0;
-        
-        case WM_LBUTTONUP:
-            if (isMeterDragging) {
-                isMeterDragging = false;
-                ReleaseCapture();
-                SaveMeterPosition();
-            }
-            return 0;
         
         case WM_RBUTTONUP:
             showMeter = false;

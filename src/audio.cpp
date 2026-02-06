@@ -9,6 +9,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <functiondiscoverykeys_devpkey.h>
 
 // Link against required libs
 #pragma comment(lib, "ole32.lib")
@@ -248,6 +249,23 @@ public:
         return peak;
     }
 
+    std::wstring GetDeviceName() {
+        std::lock_guard<std::mutex> lock(deviceMutex);
+        if (!pDefaultDevice) return L"No Microphone Found";
+        
+        ComPtr<IPropertyStore> pProps;
+        if (SUCCEEDED(pDefaultDevice->OpenPropertyStore(STGM_READ, &pProps))) {
+            PROPVARIANT varName;
+            PropVariantInit(&varName);
+            if (SUCCEEDED(pProps->GetValue(PKEY_Device_FriendlyName, &varName))) {
+                std::wstring name = varName.pwszVal;
+                PropVariantClear(&varName);
+                return name;
+            }
+        }
+        return L"Unknown Device";
+    }
+
     bool GetMuteState() {
         return isMutedGlobal;
     }
@@ -359,4 +377,9 @@ float GetMicLevel() {
 float GetSpeakerLevel() {
     if (g_Audio) return g_Audio->GetCurrentSpeakerLevel();
     return 0.0f;
+}
+
+std::wstring GetMicDeviceName() {
+    if (g_Audio) return g_Audio->GetDeviceName();
+    return L"No Audio System";
 }

@@ -27,21 +27,30 @@ void LoadOverlayPosition(int* x, int* y) {
 void SaveMeterPosition() {
     if (!hMeterWnd) return;
     RECT rect; GetWindowRect(hMeterWnd, &rect);
+    int w = rect.right - rect.left;
+    int h = rect.bottom - rect.top;
+    
     HKEY hKey;
     if (RegCreateKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
         RegSetValueEx(hKey, "MeterX", 0, REG_DWORD, (BYTE*)&rect.left, sizeof(DWORD));
         RegSetValueEx(hKey, "MeterY", 0, REG_DWORD, (BYTE*)&rect.top, sizeof(DWORD));
+        RegSetValueEx(hKey, "MeterW", 0, REG_DWORD, (BYTE*)&w, sizeof(DWORD));
+        RegSetValueEx(hKey, "MeterH", 0, REG_DWORD, (BYTE*)&h, sizeof(DWORD));
         RegCloseKey(hKey);
     }
 }
 
-void LoadMeterPosition(int* x, int* y) {
+void LoadMeterPosition(int* x, int* y, int* w, int* h) {
     *x = 50; *y = 100;
+    *w = 180; *h = 100; // Defaults
+    
     HKEY hKey;
     if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD);
         RegQueryValueEx(hKey, "MeterX", NULL, NULL, (BYTE*)x, &size);
         RegQueryValueEx(hKey, "MeterY", NULL, NULL, (BYTE*)y, &size);
+        RegQueryValueEx(hKey, "MeterW", NULL, NULL, (BYTE*)w, &size);
+        RegQueryValueEx(hKey, "MeterH", NULL, NULL, (BYTE*)h, &size);
         RegCloseKey(hKey);
     }
 }

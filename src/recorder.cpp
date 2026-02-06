@@ -18,21 +18,30 @@ static WasapiRecorder recorder; // Global instance
 void SaveRecorderPosition() {
     if (!hRecorderWnd) return;
     RECT rect; GetWindowRect(hRecorderWnd, &rect);
+    int w = rect.right - rect.left;
+    int h = rect.bottom - rect.top;
+    
     HKEY hKey;
     if (RegCreateKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
         RegSetValueEx(hKey, "RecorderX", 0, REG_DWORD, (BYTE*)&rect.left, sizeof(DWORD));
         RegSetValueEx(hKey, "RecorderY", 0, REG_DWORD, (BYTE*)&rect.top, sizeof(DWORD));
+        RegSetValueEx(hKey, "RecorderW", 0, REG_DWORD, (BYTE*)&w, sizeof(DWORD));
+        RegSetValueEx(hKey, "RecorderH", 0, REG_DWORD, (BYTE*)&h, sizeof(DWORD));
         RegCloseKey(hKey);
     }
 }
 
-void LoadRecorderPosition(int* x, int* y) {
+void LoadRecorderPosition(int* x, int* y, int* w, int* h) {
     *x = 200; *y = 200;
+    *w = 320; *h = 240; // Defaults
+    
     HKEY hKey;
     if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD);
         RegQueryValueEx(hKey, "RecorderX", NULL, NULL, (BYTE*)x, &size);
         RegQueryValueEx(hKey, "RecorderY", NULL, NULL, (BYTE*)y, &size);
+        RegQueryValueEx(hKey, "RecorderW", NULL, NULL, (BYTE*)w, &size);
+        RegQueryValueEx(hKey, "RecorderH", NULL, NULL, (BYTE*)h, &size);
         RegCloseKey(hKey);
     }
 }
@@ -68,19 +77,18 @@ void UpdateRecorderUI(HWND hWnd) {
 #include <sstream>
 
 void CreateRecorderWindow(HINSTANCE hInstance) {
-    int x, y;
-    LoadRecorderPosition(&x, &y);
+    int x, y, w, h;
+    LoadRecorderPosition(&x, &y, &w, &h);
     
-    // Scale factor
+    // Scale factor checks (optional, but if loaded w/h are small, might scale)
     float scale = GetWindowScale(NULL);
-    
-    // Larger, Modern Window
-    int w = (int)(320 * scale);
-    int h = (int)(200 * scale); // Increased height for safe layout
+    if (w < 200) w = (int)(320 * scale);
+    if (h < 150) h = (int)(240 * scale);
     
     hRecorderWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
-        "MicMuteS_Recorder", "Call Recorder", WS_POPUP | WS_CAPTION | WS_SYSMENU,
+        "MicMuteS_Recorder", "Call Recorder", 
+        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME, // Resizable
         x, y, w, h,
         NULL, NULL, hInstance, NULL
     );
@@ -89,26 +97,20 @@ void CreateRecorderWindow(HINSTANCE hInstance) {
         // Set opacity (High opacity for usability)
         SetLayeredWindowAttributes(hRecorderWnd, 0, 250, LWA_ALPHA);
         
-        // Use client rect for button placement to avoid clipping
-        RECT rcClient;
-        GetClientRect(hRecorderWnd, &rcClient);
-        int cw = rcClient.right;
-        int ch = rcClient.bottom;
-
-        // Buttons
-        int btnW = (int)(100 * scale);
-        int btnH = (int)(36 * scale);
-        int margin = (int)(20 * scale);
-        int startY = ch - btnH - margin; // Relative to client area
+        // Initial control creation
+        // We defer positioning to WM_SIZE usually, but let's create them here first
         
         HWND hBtn = CreateWindow("BUTTON", "Start", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_FLAT, 
-            margin, startY, btnW, btnH, hRecorderWnd, (HMENU)BTN_START_PAUSE, hInstance, NULL);
+            0, 0, 0, 0, hRecorderWnd, (HMENU)BTN_START_PAUSE, hInstance, NULL);
         SendMessage(hBtn, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
 
         HWND hBtn2 = CreateWindow("BUTTON", "Stop/Save", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_FLAT, 
-            cw - btnW - margin, startY, btnW, btnH, hRecorderWnd, (HMENU)BTN_STOP_SAVE, hInstance, NULL);
+            0, 0, 0, 0, hRecorderWnd, (HMENU)BTN_STOP_SAVE, hInstance, NULL);
         SendMessage(hBtn2, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
         EnableWindow(hBtn2, FALSE);
+
+        // Force a resize to layout buttons
+        SetWindowPos(hRecorderWnd, NULL, 0, 0, w, h, SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED);
 
         ShowWindow(hRecorderWnd, SW_SHOW);
         UpdateWindow(hRecorderWnd);
@@ -132,6 +134,30 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             SetTextColor((HDC)wParam, colorText);
             return (LRESULT)hBrushBg;
             
+        case WM_SIZE: {
+            int newW = LOWORD(lParam);
+            int newH = HIWORD(lParam);
+            float scale = GetWindowScale(hWnd);
+
+            int btnW = (int)(100 * scale);
+            int btnH = (int)(36 * scale);
+            int margin = (int)(20 * scale);
+            int startY = newH - btnH - margin;
+
+            HWND hBtnStart = GetDlgItem(hWnd, BTN_START_PAUSE);
+            HWND hBtnStop = GetDlgItem(hWnd, BTN_STOP_SAVE);
+            
+            if (hBtnStart) {
+                MoveWindow(hBtnStart, margin, startY, btnW, btnH, TRUE);
+            }
+            if (hBtnStop) {
+                MoveWindow(hBtnStop, newW - btnW - margin, startY, btnW, btnH, TRUE);
+            }
+            // Repaint
+            InvalidateRect(hWnd, NULL, TRUE);
+            break; 
+        }
+
         case WM_COMMAND: {
             int id = LOWORD(wParam);
             if (id == BTN_START_PAUSE) {

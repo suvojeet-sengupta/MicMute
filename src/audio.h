@@ -2,6 +2,7 @@
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
 #include <wrl/client.h> // Modern ComPtr
+#include <string>
 
 using Microsoft::WRL::ComPtr;
 
@@ -14,3 +15,4 @@ bool IsAnyMicMuted();
 bool IsDefaultMicMuted();
 float GetMicLevel();
 float GetSpeakerLevel();
+std::wstring GetMicDeviceName();
