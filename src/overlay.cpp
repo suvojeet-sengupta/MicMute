@@ -100,7 +100,8 @@ void UpdateMeter() {
         
         levelHistoryIndex = (levelHistoryIndex + 1) % LEVEL_HISTORY_SIZE;
         
-        InvalidateRect(hMeterWnd, NULL, TRUE);
+        // Invalidate without erasing background to prevent flicker
+        InvalidateRect(hMeterWnd, NULL, FALSE);
     }
 }
 
@@ -148,41 +149,55 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             // Setup
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, RGB(255, 255, 255));
-            SelectObject(hdc, hFontOverlay); // Note: Font size needs handling too...
-            // Creating a scaled font on fly or pre-creating?
-            // For now, let's keep font as is (Windows might scale it if we aren't careful, but we are DPI aware so...
-            // GDI fonts defined in main.cpp with explicit sizes. We might need to select a larger font here.)
+            SelectObject(hdc, hFontOverlay);
             
             // Interpolate color
             COLORREF bgCol = InterpColor(colorOverlayBgLive, colorOverlayBgMuted, animProgress);
             HBRUSH bgBrush = CreateSolidBrush(bgCol);
             
+            // Create "Pill" shape (Capsule)
+            // Windows 11 style: Fully rounded ends
+            int cornerRadius = rect.bottom; // Full height for pill shape
+            if (cornerRadius > rect.right) cornerRadius = rect.right;
+
             SelectObject(hdc, bgBrush);
             SelectObject(hdc, GetStockObject(NULL_PEN)); 
-            int corner = (int)(40 * scale);
-            RoundRect(hdc, 0, 0, rect.right, rect.bottom, corner, corner); // Full rounded corners
+            
+            RoundRect(hdc, 0, 0, rect.right, rect.bottom, cornerRadius, cornerRadius);
             
             DeleteObject(bgBrush);
             
-            // Draw White Border
-            HPEN borderPen = CreatePen(PS_SOLID, (int)(2 * scale), RGB(255, 255, 255));
+            // Draw Border (Subtle)
+            HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255)); // Thin white border
             SelectObject(hdc, borderPen);
             SelectObject(hdc, GetStockObject(NULL_BRUSH));
-            RoundRect(hdc, 1, 1, rect.right-1, rect.bottom-1, corner, corner);
+            RoundRect(hdc, 0, 0, rect.right-1, rect.bottom-1, cornerRadius, cornerRadius);
             DeleteObject(borderPen);
             
-            // Determine icon based on progress (snap at 50%)
+            // Determine icon based on progress
             bool showMuted = (animProgress > 0.5f);
             HICON hIcon = showMuted ? hIconMicOff : hIconMicOn;
+            
+            // Layout (Center Icon + Text)
+            // Icon ~ 20px, Text ~ 50px?
             int iconSize = (int)(20 * scale);
-            int iconX = (int)(8 * scale);
-            int iconY = (rect.bottom - iconSize) / 2; //(int)(10 * scale);
-            DrawIconEx(hdc, iconX, iconY, hIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+            int padding = (int)(10 * scale);
+            
+            // Calc text width
+            const char* text = showMuted ? "MUTED" : "LIVE";
+            SIZE textSize;
+            GetTextExtentPoint32(hdc, text, strlen(text), &textSize);
+            
+            int contentWidth = iconSize + padding/2 + textSize.cx;
+            int startX = (rect.right - contentWidth) / 2;
+            
+            // Draw Icon
+            int iconY = (rect.bottom - iconSize) / 2;
+            DrawIconEx(hdc, startX, iconY, hIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
             
             // Draw Text
-            RECT textRect = rect;
-            textRect.left += (int)(32 * scale); // Shift text right
-            DrawText(hdc, showMuted ? "MUTED" : "LIVE", -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+            RECT textRect = {startX + iconSize + padding/2, 0, rect.right, rect.bottom};
+            DrawText(hdc, text, -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
             
             EndPaint(hWnd, &ps);
             return 0;
@@ -333,14 +348,19 @@ LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             RECT rect;
             GetClientRect(hWnd, &rect);
             
+            // Double Buffering
+            HDC hdcMem = CreateCompatibleDC(hdc);
+            HBITMAP hbmMem = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
+            HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hbmMem);
+
             // Background
-            FillRect(hdc, &rect, hBrushMeterBg);
+            FillRect(hdcMem, &rect, hBrushMeterBg);
             
             // Border
             HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(60, 60, 70));
-            SelectObject(hdc, borderPen);
-            SelectObject(hdc, GetStockObject(NULL_BRUSH));
-            RoundRect(hdc, 0, 0, rect.right, rect.bottom, 8, 8);
+            SelectObject(hdcMem, borderPen);
+            SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
+            RoundRect(hdcMem, 0, 0, rect.right, rect.bottom, 8, 8);
             DeleteObject(borderPen);
             
             // Split area into top (Advisor) and bottom (CX)
@@ -350,9 +370,9 @@ LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             RECT rectCX = { 0, halfHeight, rect.right, rect.bottom };
             
             // Draw Labels
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(180, 180, 180));
-            SelectObject(hdc, hFontSmall);
+            SetBkMode(hdcMem, TRANSPARENT);
+            SetTextColor(hdcMem, RGB(180, 180, 180));
+            SelectObject(hdcMem, hFontSmall);
             
             std::wstring micName = GetMicDeviceName();
             char micBuf[128];
@@ -360,26 +380,37 @@ LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
             RECT labelAdvisor = rectAdvisor; 
             labelAdvisor.left += 6; labelAdvisor.top += 2;
-            DrawText(hdc, micBuf, -1, &labelAdvisor, DT_LEFT | DT_TOP | DT_SINGLELINE);
+            DrawText(hdcMem, micBuf, -1, &labelAdvisor, DT_LEFT | DT_TOP | DT_SINGLELINE);
             
             RECT labelCX = rectCX; 
             labelCX.left += 6; labelCX.top += 2;
-            DrawText(hdc, "Audio Output (CX)", -1, &labelCX, DT_LEFT | DT_TOP | DT_SINGLELINE);
+            DrawText(hdcMem, "Audio Output (CX)", -1, &labelCX, DT_LEFT | DT_TOP | DT_SINGLELINE);
 
             // Draw Waveforms
-            DrawWaveform(hdc, rectAdvisor, levelHistory, levelHistoryIndex, IsDefaultMicMuted(), RGB(0, 255, 0), RGB(255, 255, 0));
-            DrawWaveform(hdc, rectCX, speakerLevelHistory, levelHistoryIndex, false, RGB(0, 200, 255), RGB(0, 100, 255));
+            DrawWaveform(hdcMem, rectAdvisor, levelHistory, levelHistoryIndex, IsDefaultMicMuted(), RGB(0, 255, 0), RGB(255, 255, 0));
+            DrawWaveform(hdcMem, rectCX, speakerLevelHistory, levelHistoryIndex, false, RGB(0, 200, 255), RGB(0, 100, 255));
             
             // Divider Line
             HPEN divPen = CreatePen(PS_SOLID, 1, RGB(50, 50, 60));
-            SelectObject(hdc, divPen);
-            MoveToEx(hdc, 4, halfHeight, NULL);
-            LineTo(hdc, rect.right - 4, halfHeight);
+            SelectObject(hdcMem, divPen);
+            MoveToEx(hdcMem, 4, halfHeight, NULL);
+            LineTo(hdcMem, rect.right - 4, halfHeight);
             DeleteObject(divPen);
+
+            // Blit to screen
+            BitBlt(hdc, 0, 0, rect.right, rect.bottom, hdcMem, 0, 0, SRCCOPY);
+
+            // Cleanup
+            SelectObject(hdcMem, hbmOld);
+            DeleteObject(hbmMem);
+            DeleteDC(hdcMem);
 
             EndPaint(hWnd, &ps);
             return 0;
         }
+        
+        case WM_ERASEBKGND:
+            return 1; // Prevent flickering
         
         case WM_RBUTTONUP:
             showMeter = false;

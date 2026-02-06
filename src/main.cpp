@@ -13,6 +13,26 @@
 #include "recorder.h"
 #include "ui_controls.h" // New custom controls
 
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
+
+#ifndef DWMWA_MICA_EFFECT
+#define DWMWA_MICA_EFFECT 1029
+#endif
+
+#ifndef DWMWA_SYSTEMBACKDROP_TYPE
+#define DWMWA_SYSTEMBACKDROP_TYPE 38
+#endif
+
+#ifndef DWMSBT_MAINWINDOW
+#define DWMSBT_MAINWINDOW 2
+#endif
+
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "comctl32.lib")
@@ -84,7 +104,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = hBrushBg; // Restore Dark Background
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH); // Transparency for Mica
     wc.lpszClassName = "MicMuteS_Class";
     wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
     RegisterClassEx(&wc);
@@ -137,13 +157,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     
     if (!hMainWnd) return 0;
 
-    // Definitions for Mica (if not in headers)
-    #ifndef DWMWA_SYSTEMBACKDROP_TYPE
-    #define DWMWA_SYSTEMBACKDROP_TYPE 38
-    #endif
-    #ifndef DWMSBT_MAINWINDOW
-    #define DWMSBT_MAINWINDOW 2
-    #endif
+    // Extend Frame into Client Area for Mica
+    MARGINS margins = {-1};
+    DwmExtendFrameIntoClientArea(hMainWnd, &margins);
 
     // Dark Mode Titlebar (Windows 11)
     BOOL value = TRUE;
@@ -282,8 +298,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             RECT rcClient;
             GetClientRect(hWnd, &rcClient);
 
-            // Draw Sidebar Background
-            DrawSidebar(hdc, rcClient, currentTab);
+            // Don't fill background to let Mica show through
+            // Draw Sidebar Background (Make it semi-transparent or just draw directly)
+            // If sidebar needs to be distinct, we can draw it with alpha or solid color.
+            // For now, let's keep the design but relying on Mica for the main background.
+            
+            // Draw Sidebar (we might want this slightly opaque or just let Mica handle it)
+            // DrawSidebar(hdc, rcClient, currentTab); 
+            // ^ Replacing generic DrawSidebar with direct drawing to control transparency if needed
+            
+            RECT rcSidebar = {0, 0, SIDEBAR_WIDTH, rcClient.bottom};
+            FillRect(hdc, &rcSidebar, hBrushSidebarBg); // Sidebar stays solid/dark for contrast
 
             // Draw Sidebar Title
             SetBkMode(hdc, TRANSPARENT);
@@ -296,10 +321,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             for (int i = 0; i < TAB_COUNT; i++) {
                 DrawSidebarItem(hdc, i, tabNames[i], currentTab, hoverTab);
             }
-
-            // Draw Content Area Divider (optional)
-            // RECT rcSep = {SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH+1, rcClient.bottom};
-            // FillRect(hdc, &rcSep, (HBRUSH)GetStockObject(DKGRAY_BRUSH));
 
             // Content Headings for placeholder tabs
             if (currentTab != 0) {
@@ -482,8 +503,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
 
         case WM_NCHITTEST: {
-            // Standard hit testing - dragging only works on the title bar
-            return DefWindowProc(hWnd, msg, wParam, lParam);
+            LRESULT hit = DefWindowProc(hWnd, msg, wParam, lParam);
+            if (hit == HTCLIENT) {
+                POINT pt;
+                GetCursorPos(&pt);
+                ScreenToClient(hWnd, &pt);
+
+                // Allow dragging from top area (e.g., top 50 pixels)
+                // Also allow dragging from empty parts of sidebar?
+                if (pt.y < 50) {
+                    return HTCAPTION;
+                }
+            }
+            return hit;
         }
 
         case WM_SYSCOMMAND:
