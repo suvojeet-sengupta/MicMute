@@ -9,6 +9,7 @@ HWND hMeterWnd = NULL;
 bool isRunOnStartup = false;
 bool showOverlay = false;
 bool showMeter = false;
+bool showRecorder = false;
 
 HFONT hFontTitle;
 HFONT hFontStatus;

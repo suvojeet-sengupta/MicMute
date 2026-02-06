@@ -11,6 +11,7 @@ extern HWND hMeterWnd;
 extern bool isRunOnStartup;
 extern bool showOverlay;
 extern bool showMeter;
+extern bool showRecorder;
 
 extern HFONT hFontTitle;
 extern HFONT hFontStatus;

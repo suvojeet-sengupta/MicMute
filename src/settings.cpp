@@ -53,6 +53,8 @@ void SaveSettings() {
         RegSetValueEx(hKey, "ShowOverlay", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
         val = showMeter ? 1 : 0;
         RegSetValueEx(hKey, "ShowMeter", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+        val = showRecorder ? 1 : 0;
+        RegSetValueEx(hKey, "ShowRecorder", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
         RegCloseKey(hKey);
     }
 }
@@ -66,6 +68,8 @@ void LoadSettings() {
             showOverlay = val != 0;
         if (RegQueryValueEx(hKey, "ShowMeter", NULL, NULL, (BYTE*)&val, &size) == ERROR_SUCCESS)
             showMeter = val != 0;
+        if (RegQueryValueEx(hKey, "ShowRecorder", NULL, NULL, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            showRecorder = val != 0;
         RegCloseKey(hKey);
     }
 }

@@ -1,0 +1,15 @@
+#pragma once
+#include <windows.h>
+#include <string>
+
+// Global Recorder Window Handle
+extern HWND hRecorderWnd;
+
+// Functions
+void CreateRecorderWindow(HINSTANCE hInstance);
+void ShowRecorderWindow(bool show);
+void InitRecorder();
+void CleanupRecorder();
+
+// Window Procedure
+LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);

@@ -13,6 +13,7 @@
 #define ID_STATUS_LABEL  1006
 #define ID_SHOW_OVERLAY  1007
 #define ID_SHOW_METER    1008
+#define ID_SHOW_RECORDER 1009
 
 #define WM_TRAYICON (WM_USER + 1)
 

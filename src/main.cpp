@@ -9,6 +9,7 @@
 #include "tray.h"
 #include "overlay.h"
 #include "ui.h"
+#include "recorder.h"
 
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "dwmapi.lib")
@@ -73,9 +74,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wcMeter.lpszClassName = "MicMuteS_Meter";
     RegisterClassEx(&wcMeter);
 
+    // Register recorder window class
+    WNDCLASSEX wcRec = {0};
+    wcRec.cbSize = sizeof(WNDCLASSEX);
+    wcRec.style = CS_HREDRAW | CS_VREDRAW;
+    wcRec.lpfnWndProc = RecorderWndProc;
+    wcRec.hInstance = hInstance;
+    wcRec.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wcRec.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH); // Will be painted over
+    wcRec.lpszClassName = "MicMuteS_Recorder";
+    RegisterClassEx(&wcRec);
+
     // Window size and position
     int width = 450;
-    int height = 420;
+    int height = 500; // Increased height for new option
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
     int x = (screenW - width) / 2;
@@ -141,6 +153,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // Create overlays if enabled
     if (showOverlay) CreateOverlayWindow(hInstance);
     if (showMeter) CreateMeterWindow(hInstance);
+    if (showRecorder) CreateRecorderWindow(hInstance);
 
     AddTrayIcon(hMainWnd);
     UpdateUIState();
@@ -171,13 +184,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     DeleteObject(hFontSmall);
     DeleteObject(hFontOverlay);
     UninitializeAudio();
+    CleanupRecorder();
     CloseHandle(hMutex);
     
     return (int)msg.wParam;
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    static HWND hStartupCheck, hOverlayCheck, hMeterCheck;
+    static HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck;
 
     switch (msg) {
         case WM_CREATE: {
@@ -207,14 +221,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SendMessage(hMeterCheck, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
             SendMessage(hMeterCheck, BM_SETCHECK, showMeter ? BST_CHECKED : BST_UNCHECKED, 0);
 
+            hRecorderCheck = CreateWindow("BUTTON", "  Show call recorder", 
+                WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 80, 244, 300, 28, hWnd, (HMENU)ID_SHOW_RECORDER, hInst, NULL);
+            SendMessage(hRecorderCheck, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
+            SendMessage(hRecorderCheck, BM_SETCHECK, showRecorder ? BST_CHECKED : BST_UNCHECKED, 0);
+
             CreateWindow("STATIC", "Click tray/floating button to toggle mute", 
-                WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 260, 450, 18, hWnd, NULL, hInst, NULL);
+                WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 290, 450, 18, hWnd, NULL, hInst, NULL);
             CreateWindow("STATIC", "Drag overlays to move  |  Right-click to hide", 
-                WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 280, 450, 18, hWnd, NULL, hInst, NULL);
+                WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 310, 450, 18, hWnd, NULL, hInst, NULL);
             CreateWindow("STATIC", "Minimize to hide  |  Right-click tray for menu", 
-                WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 300, 450, 18, hWnd, NULL, hInst, NULL);
+                WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 330, 450, 18, hWnd, NULL, hInst, NULL);
             CreateWindow("STATIC", "by Suvojeet Sengupta", 
-                WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 340, 450, 18, hWnd, NULL, hInst, NULL);
+                WS_VISIBLE | WS_CHILD | SS_CENTER, 0, 370, 450, 18, hWnd, NULL, hInst, NULL);
             break;
         }
 
@@ -253,6 +272,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     else ShowWindow(hMeterWnd, SW_SHOW);
                 } else if (hMeterWnd) ShowWindow(hMeterWnd, SW_HIDE);
             }
+            else if (wmId == ID_SHOW_RECORDER) {
+                showRecorder = (SendMessage(hRecorderCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                SaveSettings();
+                if (showRecorder) {
+                    if (!hRecorderWnd) CreateRecorderWindow(GetModuleHandle(NULL));
+                    else ShowWindow(hRecorderWnd, SW_SHOW);
+                } else if (hRecorderWnd) ShowWindow(hRecorderWnd, SW_HIDE);
+            }
             else if (wmId == ID_TRAY_OPEN) {
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
@@ -260,6 +287,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             else if (wmId == ID_TRAY_EXIT) {
                 if (hOverlayWnd) DestroyWindow(hOverlayWnd);
                 if (hMeterWnd) DestroyWindow(hMeterWnd);
+                if (hRecorderWnd) CleanupRecorder(), DestroyWindow(hRecorderWnd);
                 DestroyWindow(hWnd);
             }
             break;
