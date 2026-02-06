@@ -76,7 +76,7 @@ void CreateRecorderWindow(HINSTANCE hInstance) {
     
     // Larger, Modern Window
     int w = (int)(320 * scale);
-    int h = (int)(180 * scale);
+    int h = (int)(200 * scale); // Increased height for safe layout
     
     hRecorderWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
@@ -89,19 +89,24 @@ void CreateRecorderWindow(HINSTANCE hInstance) {
         // Set opacity (High opacity for usability)
         SetLayeredWindowAttributes(hRecorderWnd, 0, 250, LWA_ALPHA);
         
+        // Use client rect for button placement to avoid clipping
+        RECT rcClient;
+        GetClientRect(hRecorderWnd, &rcClient);
+        int cw = rcClient.right;
+        int ch = rcClient.bottom;
+
         // Buttons
-        // Center them?
         int btnW = (int)(100 * scale);
         int btnH = (int)(36 * scale);
         int margin = (int)(20 * scale);
-        int startY = h - btnH - margin;
+        int startY = ch - btnH - margin; // Relative to client area
         
         HWND hBtn = CreateWindow("BUTTON", "Start", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_FLAT, 
             margin, startY, btnW, btnH, hRecorderWnd, (HMENU)BTN_START_PAUSE, hInstance, NULL);
         SendMessage(hBtn, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
 
         HWND hBtn2 = CreateWindow("BUTTON", "Stop/Save", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_FLAT, 
-            w - btnW - margin, startY, btnW, btnH, hRecorderWnd, (HMENU)BTN_STOP_SAVE, hInstance, NULL);
+            cw - btnW - margin, startY, btnW, btnH, hRecorderWnd, (HMENU)BTN_STOP_SAVE, hInstance, NULL);
         SendMessage(hBtn2, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
         EnableWindow(hBtn2, FALSE);
 

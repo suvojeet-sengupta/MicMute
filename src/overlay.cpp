@@ -256,21 +256,20 @@ void DrawWaveform(HDC hdc, RECT rect, float* history, int historyIndex, bool isM
         float rawLevel = history[bufferIdx];
         
         // Improved Logarithmic Scaling
-        // Target: Show smallest sounds. Floor at -96dB (16-bit silence essentially)
+        // Target: Show smallest sounds but avoid noise floor.
         float displayLevel = 0.0f;
-        float minDb = -96.0f;
+        float minDb = -72.0f; // More realistic for standard microphones
         
         if (rawLevel > 0.0f) {
             float db = 20.0f * log10f(rawLevel);
             if (db < minDb) db = minDb;
             
             // Normalize 0..1
-            // (-96 -> 0, 0 -> 1)
+            // (-72 -> 0, 0 -> 1)
             float normalized = (db - minDb) / (0.0f - minDb);
             
-            // Apply Power curve to boost lower levels visually
-            // display = pow(normalized, 0.7) -> Makes 0.2 input become 0.32 (boosted)
-            displayLevel = powf(normalized, 0.75f);
+            // Linear scaling is safer for noisy mics, but let's keep a mild boost
+            displayLevel = powf(normalized, 0.9f); 
         }
         
         if (displayLevel < 0.0f) displayLevel = 0.0f;
