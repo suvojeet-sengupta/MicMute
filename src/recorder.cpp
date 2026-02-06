@@ -129,6 +129,12 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                     mciSendString("set myrec bytespersec 176400", NULL, 0, NULL);
                     mciSendString("set myrec alignment 4", NULL, 0, NULL);
                     
+                    mciSendString("set myrec alignment 4", NULL, 0, NULL);
+                    
+                    // Attempt to boost volume (MCI 'set audio' command)
+                    // Note: 'volume' is 0-1000. We set to 1000 (max).
+                    mciSendString("setaudio myrec volume to 1000", NULL, 0, NULL);
+                    
                     mciSendString("record myrec", NULL, 0, NULL);
                     isRecording = true;
                     isPaused = false;
