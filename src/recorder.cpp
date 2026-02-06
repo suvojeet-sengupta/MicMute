@@ -1,18 +1,15 @@
 #include "recorder.h"
+#include "WasapiRecorder.h"
 #include "globals.h"
 #include "settings.h"
 #include <commdlg.h>
 #include <cstdio>
 
-#pragma comment(lib, "winmm.lib")
+#pragma comment(lib, "winmm.lib") // Still needed for some system calls if any, but not MCI
 #pragma comment(lib, "comdlg32.lib")
 
 HWND hRecorderWnd = NULL;
-
-// State
-static bool isRecording = false;
-static bool isPaused = false;
-static bool hasRecording = false;
+static WasapiRecorder recorder; // Global instance
 
 // Button IDs (Local)
 #define BTN_START_PAUSE 2001
@@ -41,22 +38,19 @@ void LoadRecorderPosition(int* x, int* y) {
 }
 
 void InitRecorder() {
-    // nothing specific needed for MCI unless we want to pre-open
+    // No explicit global init needed for WasapiRecorder
 }
 
 void CleanupRecorder() {
-    if (isRecording || isPaused) {
-        mciSendString("stop myrec", NULL, 0, NULL);
-        mciSendString("close myrec", NULL, 0, NULL);
-    }
+    recorder.Stop();
 }
 
 void UpdateRecorderUI(HWND hWnd) {
     HWND hBtnStart = GetDlgItem(hWnd, BTN_START_PAUSE);
     HWND hBtnStop = GetDlgItem(hWnd, BTN_STOP_SAVE);
     
-    if (isRecording) {
-        if (isPaused) {
+    if (recorder.IsRecording()) {
+        if (recorder.IsPaused()) {
             SetWindowText(hBtnStart, "Resume");
         } else {
             SetWindowText(hBtnStart, "Pause");
@@ -88,7 +82,7 @@ void CreateRecorderWindow(HINSTANCE hInstance) {
             10, 10, 80, 40, hRecorderWnd, (HMENU)BTN_START_PAUSE, hInstance, NULL);
         SendMessage(hBtn, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
 
-        HWND hBtn2 = CreateWindow("BUTTON", "Save", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 
+        HWND hBtn2 = CreateWindow("BUTTON", "Stop/Save", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 
             110, 10, 80, 40, hRecorderWnd, (HMENU)BTN_STOP_SAVE, hInstance, NULL);
         SendMessage(hBtn2, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
         EnableWindow(hBtn2, FALSE);
@@ -117,43 +111,26 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
         case WM_COMMAND: {
             int id = LOWORD(wParam);
             if (id == BTN_START_PAUSE) {
-                if (!isRecording) {
+                if (!recorder.IsRecording()) {
                     // Start Recording
-                    mciSendString("open new type waveaudio alias myrec", NULL, 0, NULL);
-                    
-                    // Configure High Quality (44.1kHz, 16-bit, Stereo)
-                    mciSendString("set myrec time format ms", NULL, 0, NULL);
-                    mciSendString("set myrec bitspersample 16", NULL, 0, NULL);
-                    mciSendString("set myrec samplespersec 44100", NULL, 0, NULL);
-                    mciSendString("set myrec channels 2", NULL, 0, NULL);
-                    mciSendString("set myrec bytespersec 176400", NULL, 0, NULL);
-                    mciSendString("set myrec alignment 4", NULL, 0, NULL);
-                    
-                    mciSendString("set myrec alignment 4", NULL, 0, NULL);
-                    
-                    // Attempt to boost volume (MCI 'set audio' command)
-                    // Note: 'volume' is 0-1000. We set to 1000 (max).
-                    mciSendString("setaudio myrec volume to 1000", NULL, 0, NULL);
-                    
-                    mciSendString("record myrec", NULL, 0, NULL);
-                    isRecording = true;
-                    isPaused = false;
-                    hasRecording = true;
+                    if (recorder.Start()) {
+                        // Success
+                    } else {
+                        MessageBox(hWnd, "Failed to start recording. Check microphone permissions.", "Error", MB_ICONERROR);
+                    }
                 } else {
                     // Pause/Resume
-                    if (isPaused) {
-                        mciSendString("resume myrec", NULL, 0, NULL);
-                        isPaused = false;
+                    if (recorder.IsPaused()) {
+                        recorder.Resume();
                     } else {
-                        mciSendString("pause myrec", NULL, 0, NULL);
-                        isPaused = true;
+                        recorder.Pause();
                     }
                 }
                 UpdateRecorderUI(hWnd);
             }
             else if (id == BTN_STOP_SAVE) {
                 // Stop
-                mciSendString("pause myrec", NULL, 0, NULL); // Pause first to avoid noise
+                recorder.Stop(); // Ensure consistent state
                 
                 // Save Dialog
                 OPENFILENAME ofn;
@@ -169,33 +146,27 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                 ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
 
                 if (GetSaveFileName(&ofn) == TRUE) {
-                    char cmd[512];
-                    sprintf_s(cmd, "save myrec \"%s\"", ofn.lpstrFile);
-                    mciSendString(cmd, NULL, 0, NULL);
-                    
-                    // Cleanup
-                    mciSendString("close myrec", NULL, 0, NULL);
-                    isRecording = false;
-                    isPaused = false;
-                    hasRecording = false;
-                    UpdateRecorderUI(hWnd);
-                    MessageBox(hWnd, "Recording Saved!", "MicMute-S", MB_OK);
+                    if (recorder.SaveToFile(ofn.lpstrFile)) {
+                        MessageBox(hWnd, "Recording Saved!", "MicMute-S", MB_OK);
+                    } else {
+                        MessageBox(hWnd, "Failed to write file associated data.", "Error", MB_ICONERROR);
+                    }
                 } else {
-                   // Cancelled save - maybe just resume? or keep paused?
-                   // User can press Save again.
+                   // User cancelled save. The buffer is still there until they click Start again.
+                   // Optionally we could auto-clear or keep it. Current logic keeps it until next start.
                 }
+                
+                UpdateRecorderUI(hWnd);
             }
             break;
         }
         
         case WM_CLOSE:
-            if (isRecording) {
+            if (recorder.IsRecording()) {
                 if (MessageBox(hWnd, "Recording is in progress. Stop and discard?", "Warning", MB_YESNO) == IDNO) {
                     return 0;
                 }
-                mciSendString("stop myrec", NULL, 0, NULL);
-                mciSendString("close myrec", NULL, 0, NULL);
-                isRecording = false;
+                recorder.Stop();
             }
             showRecorder = false;
             SaveSettings();
@@ -215,8 +186,8 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             SelectObject(hdc, hFontSmall);
             
             RECT textRect = {10, 60, 190, 80};
-            if (isRecording) {
-                if (isPaused) DrawText(hdc, "PAUSED", -1, &textRect, DT_CENTER);
+            if (recorder.IsRecording()) {
+                if (recorder.IsPaused()) DrawText(hdc, "PAUSED", -1, &textRect, DT_CENTER);
                 else DrawText(hdc, "RECORDING...", -1, &textRect, DT_CENTER);
             } else {
                 DrawText(hdc, "Ready", -1, &textRect, DT_CENTER);
@@ -239,3 +210,4 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
     }
     return 0;
 }
+

@@ -11,8 +11,8 @@ void UpdateUIState() {
     static int lastMuted = -1; // -1 for uninitialized
     bool muted = IsDefaultMicMuted();
     
-    if (muted != lastMuted) {
-        lastMuted = muted;
+    if ((int)muted != lastMuted) {
+        lastMuted = (int)muted;
         UpdateTrayIcon(muted);
         UpdateOverlay();
 
