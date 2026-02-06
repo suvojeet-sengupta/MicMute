@@ -44,6 +44,12 @@ LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 int currentTab = 0; // 0=General, 1=Hotkeys, 2=Audio, 3=Appearance
 int hoverTab = -1;
 
+// Custom Caption Buttons
+RECT rcClose = {0};
+RECT rcMin = {0};
+bool isHoverClose = false;
+bool isHoverMin = false;
+
 // General Tab Controls
 HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck;
 
@@ -242,6 +248,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+        case WM_NCCALCSIZE:
+            if (wParam) return 0; // Remove standard frame for seamless client area
+            return DefWindowProc(hWnd, msg, wParam, lParam);
+
         case WM_CREATE: {
             HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
             
@@ -249,8 +259,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // We'll draw it in WM_PAINT instead of a static control for better look
             
             // Status Label (Top Right Area)
-             CreateWindow("STATIC", "Checking...", WS_VISIBLE | WS_CHILD | SS_CENTER, 
-                SIDEBAR_WIDTH, 30, 850 - SIDEBAR_WIDTH, 40, hWnd, (HMENU)ID_STATUS_LABEL, hInst, NULL);
+            // REMOVED: Static control blocks dragging. We will draw this manually in WM_PAINT.
+            // CreateWindow("STATIC", "Checking...", WS_VISIBLE | WS_CHILD | SS_CENTER, 
+            //    SIDEBAR_WIDTH, 30, 850 - SIDEBAR_WIDTH, 40, hWnd, (HMENU)ID_STATUS_LABEL, hInst, NULL);
 
             // -- GENERAL TAB TOGGLES --
             // Positioned in the content area (Right of Sidebar)
@@ -322,6 +333,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 DrawSidebarItem(hdc, i, tabNames[i], currentTab, hoverTab);
             }
 
+            // Draw Status Text (Directly on Main Window)
+            {
+                bool isMutedStatus = IsDefaultMicMuted();
+                // Set color based on status
+                SetTextColor(hdc, isMutedStatus ? colorMuted : colorLive);
+                SelectObject(hdc, hFontStatus);
+                
+                // Draw in the top-right area
+                // Avoid caption buttons (right side ~100px)
+                RECT rcStatus = {SIDEBAR_WIDTH, 30, rcClient.right - 100, 70}; 
+                const char* statusText = isMutedStatus ? "MICROPHONE MUTED" : "MICROPHONE LIVE";
+                DrawText(hdc, statusText, -1, &rcStatus, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+            }
+
             // Content Headings for placeholder tabs
             if (currentTab != 0) {
                 SetTextColor(hdc, colorTextDim);
@@ -329,6 +354,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 RECT rcContent = {SIDEBAR_WIDTH, 150, rcClient.right, 250};
                 DrawText(hdc, "Coming Soon", -1, &rcContent, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
             }
+
+            // Draw Custom Caption Buttons
+            int btnW = 45;
+            int btnH = 30;
+            rcClose = {rcClient.right - btnW, 0, rcClient.right, btnH};
+            rcMin = {rcClose.left - btnW, 0, rcClose.left, btnH};
+
+            // Close Button
+            if (isHoverClose) {
+                HBRUSH hRed = CreateSolidBrush(RGB(232, 17, 35));
+                FillRect(hdc, &rcClose, hRed);
+                DeleteObject(hRed);
+                SetTextColor(hdc, RGB(255, 255, 255));
+            } else {
+                SetTextColor(hdc, colorText);
+            }
+            SelectObject(hdc, hFontNormal); // Use normal font for symbols
+            DrawText(hdc, "\x72", 1, &rcClose, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX); // Webdings 'r' = X (Need correct font or simple X)
+            // Actually simpler to use simple X/Min text with Segoe UI
+            DrawText(hdc, "X", 1, &rcClose, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+
+            // Minimize Button
+            if (isHoverMin) {
+                HBRUSH hHover = CreateSolidBrush(RGB(50, 50, 50));
+                FillRect(hdc, &rcMin, hHover);
+                DeleteObject(hHover);
+            }
+            SetTextColor(hdc, colorText);
+            DrawText(hdc, "_", 1, &rcMin, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
 
             EndPaint(hWnd, &ps);
             return 0;
@@ -362,17 +416,36 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             if (newHover != hoverTab) {
                 hoverTab = newHover;
-                // Invalidate only sidebar area for performance
                 RECT rcSidebar = {0, 0, SIDEBAR_WIDTH, 500};
                 InvalidateRect(hWnd, &rcSidebar, FALSE);
                 
-                // Track mouse leave to reset hover
                 TRACKMOUSEEVENT tme;
                 tme.cbSize = sizeof(TRACKMOUSEEVENT);
                 tme.dwFlags = TME_LEAVE;
                 tme.hwndTrack = hWnd;
                 TrackMouseEvent(&tme);
             }
+
+            // Caption Button Hover
+            bool paint = false;
+            POINT pt = {x, y};
+            if (PtInRect(&rcClose, pt)) {
+                if (!isHoverClose) { isHoverClose = true; paint = true; }
+            } else {
+                if (isHoverClose) { isHoverClose = false; paint = true; }
+            }
+
+            if (PtInRect(&rcMin, pt)) {
+                if (!isHoverMin) { isHoverMin = true; paint = true; }
+            } else {
+                if (isHoverMin) { isHoverMin = false; paint = true; }
+            }
+            
+            if (paint) {
+                RECT rcBtns = {rcMin.left, 0, rcClose.right, rcClose.bottom};
+                InvalidateRect(hWnd, &rcBtns, FALSE);
+            }
+
             break;
         }
 
@@ -386,6 +459,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_LBUTTONDOWN: {
             int x = LOWORD(lParam);
             int y = HIWORD(lParam);
+            POINT pt = {x, y};
+
+            // Caption Buttons
+            if (PtInRect(&rcClose, pt)) {
+                SendMessage(hWnd, WM_CLOSE, 0, 0); // Or minimize to tray depending on settings
+                return 0;
+            }
+            if (PtInRect(&rcMin, pt)) {
+                ShowWindow(hWnd, SW_MINIMIZE);
+                return 0;
+            }
             
             if (x < SIDEBAR_WIDTH) {
                 for (int i = 0; i < TAB_COUNT; i++) {
@@ -406,14 +490,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_CTLCOLORSTATIC: {
             HDC hdc = (HDC)wParam;
             SetBkColor(hdc, colorBg);
-            int id = GetDlgCtrlID((HWND)lParam);
-            if (id == ID_STATUS_LABEL) {
-                SetTextColor(hdc, IsDefaultMicMuted() ? colorMuted : colorLive);
-                SelectObject(hdc, hFontStatus);
-            } else {
-                SetTextColor(hdc, colorTextDim);
-                SelectObject(hdc, hFontSmall);
-            }
+            SetTextColor(hdc, colorTextDim);
+            SelectObject(hdc, hFontSmall);
             return (LRESULT)hBrushBg;
         }
 
@@ -504,18 +582,48 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_NCHITTEST: {
             LRESULT hit = DefWindowProc(hWnd, msg, wParam, lParam);
-            if (hit == HTCLIENT) {
-                POINT pt;
-                GetCursorPos(&pt);
-                ScreenToClient(hWnd, &pt);
+            // Handle resizing edges manually if NCCALCSIZE removed them?
+            // Actually DefWindowProc still handles resizing if we respect borders... 
+            // BUT with NCCALCSIZE=0, the client area covers borders.
+            // We need to implement manual border hit testing for resizing.
+            
+            POINT pt; GetCursorPos(&pt);
+            RECT rc; GetWindowRect(hWnd, &rc);
+            
+            int border = 6; // Resize border thickness
+            if (pt.x < rc.left + border && pt.y < rc.top + border) return HTTOPLEFT;
+            if (pt.x > rc.right - border && pt.y < rc.top + border) return HTTOPRIGHT;
+            if (pt.x < rc.left + border && pt.y > rc.bottom - border) return HTBOTTOMLEFT;
+            if (pt.x > rc.right - border && pt.y > rc.bottom - border) return HTBOTTOMRIGHT;
+            if (pt.x < rc.left + border) return HTLEFT;
+            if (pt.x > rc.right - border) return HTRIGHT;
+            if (pt.y < rc.top + border) return HTTOP;
+            if (pt.y > rc.bottom - border) return HTBOTTOM;
+            
+            POINT clientPt = pt;
+            ScreenToClient(hWnd, &clientPt);
 
-                // Allow dragging from top area (e.g., top 50 pixels)
-                // Also allow dragging from empty parts of sidebar?
-                if (pt.y < 50) {
+            // Caption Buttons (Pass through to Client for Hover/Click)
+            if (PtInRect(&rcClose, clientPt) || PtInRect(&rcMin, clientPt)) {
+                return HTCLIENT;
+            }
+
+            // Draggable Header Area (Top 50px)
+            if (clientPt.y < 50) {
+                return HTCAPTION;
+            }
+
+            // Draggable Sidebar (Empty Areas)
+            // Items are from 100 to 100 + (4*50) = 300
+            if (clientPt.x < SIDEBAR_WIDTH) {
+                int itemStart = 100;
+                int itemEnd = 100 + (TAB_COUNT * SIDEBAR_ITEM_HEIGHT);
+                if (clientPt.y < itemStart || clientPt.y > itemEnd) {
                     return HTCAPTION;
                 }
             }
-            return hit;
+            
+            return HTCLIENT;
         }
 
         case WM_SYSCOMMAND:

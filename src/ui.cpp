@@ -17,11 +17,8 @@ void UpdateUIState() {
         UpdateOverlay();
         ShowTrayNotification(muted); // Trigger Toast
 
-        HWND hStatus = GetDlgItem(hMainWnd, ID_STATUS_LABEL);
-        if (hStatus) {
-            SetWindowText(hStatus, muted ? "MICROPHONE MUTED" : "MICROPHONE LIVE");
-            InvalidateRect(hStatus, NULL, TRUE);
-        }
+        // Invalidate main window to redraw status text
+        InvalidateRect(hMainWnd, NULL, TRUE);
     }
 }
 
