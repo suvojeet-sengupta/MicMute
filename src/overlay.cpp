@@ -177,12 +177,15 @@ LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             int startX = 8;
 
             for (int i = 0; i < numSamples; i++) {
-                // Get oldest to newest? Or newest to oldest?
-                // Usually newest is at right.
-                // Circular buffer logic:
-                int idx = (levelHistoryIndex - 1 - i + numSamples) % numSamples; // Newest is at index 0 (visual right)
-                // Actually let's draw Left=Oldest, Right=Newest
-                // Oldest is at (levelHistoryIndex)
+                // Determine which sample to draw at this horizontal position (i)
+                // We want: 
+                // i = 0 (Left side)  -> Oldest sample
+                // i = max (Right side) -> Newest sample
+                //
+                // levelHistoryIndex points to the NEXT insert position, which effectively holds the OLDEST sample (circularly).
+                // So levelHistoryIndex + 0 is the Oldest.
+                // levelHistoryIndex + (numSamples-1) is the Newest.
+                
                 int bufferIdx = (levelHistoryIndex + i) % numSamples;
                 
                 float rawLevel = levelHistory[bufferIdx];
