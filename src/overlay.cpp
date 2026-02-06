@@ -6,6 +6,11 @@
 #include <dwmapi.h>
 #include <cmath> // for abs
 
+// Animation state
+static float animProgress = 0.0f; // 0.0 = Live, 1.0 = Muted
+static float animTarget = 0.0f;
+static bool isAnimating = false;
+
 void CreateOverlayWindow(HINSTANCE hInstance) {
     int overlayX, overlayY;
     LoadOverlayPosition(&overlayX, &overlayY);
@@ -18,6 +23,11 @@ void CreateOverlayWindow(HINSTANCE hInstance) {
     );
     
     if (hOverlayWnd) {
+        // Init animation state
+        bool muted = IsDefaultMicMuted();
+        animTarget = muted ? 1.0f : 0.0f;
+        animProgress = animTarget;
+
         // Set initial transparency
         SetLayeredWindowAttributes(hOverlayWnd, colorChroma, (BYTE)overlayOpacity, LWA_ALPHA | LWA_COLORKEY);
         ShowWindow(hOverlayWnd, SW_SHOW);
@@ -45,9 +55,22 @@ void CreateMeterWindow(HINSTANCE hInstance) {
     }
 }
 
+// Helper to interpolate colors
+COLORREF InterpColor(COLORREF c1, COLORREF c2, float t) {
+    int r = (int)(GetRValue(c1) + (GetRValue(c2) - GetRValue(c1)) * t);
+    int g = (int)(GetGValue(c1) + (GetGValue(c2) - GetGValue(c1)) * t);
+    int b = (int)(GetBValue(c1) + (GetBValue(c2) - GetBValue(c1)) * t);
+    return RGB(r, g, b);
+}
+
 void UpdateOverlay() {
     if (hOverlayWnd && IsWindowVisible(hOverlayWnd)) {
-        InvalidateRect(hOverlayWnd, NULL, TRUE);
+        // Check state once when requested
+        bool muted = IsDefaultMicMuted();
+        animTarget = muted ? 1.0f : 0.0f;
+        
+        // Start animation timer
+        SetTimer(hOverlayWnd, 3, 16, NULL); // ~60 FPS
     }
 }
 
@@ -64,6 +87,26 @@ void UpdateMeter() {
 
 LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+        case WM_TIMER:
+            if (wParam == 3) {
+                // Animation logic
+                float speed = 0.15f; // Adjust for speed
+                if (animProgress < animTarget) {
+                    animProgress += speed;
+                    if (animProgress > animTarget) animProgress = animTarget;
+                } else if (animProgress > animTarget) {
+                    animProgress -= speed;
+                    if (animProgress < animTarget) animProgress = animTarget;
+                }
+                
+                InvalidateRect(hWnd, NULL, TRUE);
+                
+                if (abs(animProgress - animTarget) < 0.001f) {
+                    KillTimer(hWnd, 3);
+                }
+            }
+            return 0;
+
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hWnd, &ps);
@@ -75,13 +118,15 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             SetTextColor(hdc, RGB(255, 255, 255));
             SelectObject(hdc, hFontOverlay);
             
-            bool muted = IsDefaultMicMuted();
+            // Interpolate color
+            COLORREF bgCol = InterpColor(colorOverlayBgLive, colorOverlayBgMuted, animProgress);
+            HBRUSH bgBrush = CreateSolidBrush(bgCol);
             
-            // Draw Pill Background
-            HBRUSH bgBrush = muted ? hBrushOverlayMuted : hBrushOverlayLive;
             SelectObject(hdc, bgBrush);
             SelectObject(hdc, GetStockObject(NULL_PEN)); 
             RoundRect(hdc, 0, 0, rect.right, rect.bottom, 40, 40); // Full rounded corners
+            
+            DeleteObject(bgBrush);
             
             // Draw White Border
             HPEN borderPen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
@@ -90,14 +135,15 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             RoundRect(hdc, 1, 1, rect.right-1, rect.bottom-1, 40, 40);
             DeleteObject(borderPen);
             
-            // Draw Icon (Smaller and tighter)
-            HICON hIcon = muted ? hIconMicOff : hIconMicOn;
+            // Determine icon based on progress (snap at 50%)
+            bool showMuted = (animProgress > 0.5f);
+            HICON hIcon = showMuted ? hIconMicOff : hIconMicOn;
             DrawIconEx(hdc, 8, 10, hIcon, 20, 20, 0, NULL, DI_NORMAL);
             
             // Draw Text
             RECT textRect = rect;
             textRect.left += 32; // Shift text right
-            DrawText(hdc, muted ? "MUTED" : "LIVE", -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+            DrawText(hdc, showMuted ? "MUTED" : "LIVE", -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
             
             EndPaint(hWnd, &ps);
             return 0;

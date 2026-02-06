@@ -77,7 +77,7 @@ void ManageStartup(bool enable) {
         if (enable) {
             char exe[MAX_PATH];
             GetModuleFileName(NULL, exe, MAX_PATH);
-            RegSetValueEx(hKey, "MicMute-S", 0, REG_SZ, (BYTE*)exe, strlen(exe) + 1);
+            RegSetValueEx(hKey, "MicMute-S", 0, REG_SZ, (BYTE*)exe, (DWORD)(strlen(exe) + 1));
         } else {
             RegDeleteValue(hKey, "MicMute-S");
         }

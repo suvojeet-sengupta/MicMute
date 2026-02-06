@@ -8,7 +8,7 @@
 #include <dwmapi.h>
 
 void UpdateUIState() {
-    static bool lastMuted = -1; // -1 for uninitialized
+    static int lastMuted = -1; // -1 for uninitialized
     bool muted = IsDefaultMicMuted();
     
     if (muted != lastMuted) {
@@ -25,23 +25,6 @@ void UpdateUIState() {
 }
 
 void ToggleMute() {
-    // Fade out animation
-    if (hOverlayWnd && IsWindowVisible(hOverlayWnd)) {
-        for (int i = overlayOpacity; i >= 100; i -= 30) {
-            SetLayeredWindowAttributes(hOverlayWnd, colorChroma, (BYTE)i, LWA_ALPHA | LWA_COLORKEY);
-            Sleep(15);
-        }
-    }
-    
     ToggleMuteAll();
     UpdateUIState();
-    
-    // Fade in animation
-    if (hOverlayWnd && IsWindowVisible(hOverlayWnd)) {
-        for (int i = 100; i <= overlayOpacity; i += 30) {
-            SetLayeredWindowAttributes(hOverlayWnd, colorChroma, (BYTE)i, LWA_ALPHA | LWA_COLORKEY);
-            Sleep(15);
-        }
-        SetLayeredWindowAttributes(hOverlayWnd, colorChroma, (BYTE)overlayOpacity, LWA_ALPHA | LWA_COLORKEY);
-    }
 }
