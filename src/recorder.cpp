@@ -88,6 +88,33 @@ std::string GetCurrentTimestampString() {
     return oss.str();
 }
 
+// Helper: Get current date as YYYY-MM-DD
+std::string GetCurrentDateString() {
+    auto t = std::time(nullptr);
+    struct tm tm;
+    localtime_s(&tm, &t);
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%d");
+    return oss.str();
+}
+
+// Helper: Create directory if it doesn't exist
+bool CreateDirectoryIfNeeded(const std::string& path) {
+    DWORD attr = GetFileAttributesA(path.c_str());
+    if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+        return true; // Already exists
+    }
+    return CreateDirectoryA(path.c_str(), NULL) != 0;
+}
+
+// Get date folder path and create if needed
+std::string GetDateFolderPath() {
+    if (recordingFolder.empty()) return "";
+    std::string dateFolder = recordingFolder + "\\" + GetCurrentDateString();
+    CreateDirectoryIfNeeded(dateFolder);
+    return dateFolder;
+}
+
 static time_t recordingStartTime = 0;
 
 void DrawIconBtn(LPDRAWITEMSTRUCT lpDrawItem, int type) {
@@ -279,12 +306,13 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                     time_t endTime = std::time(nullptr);
                     
                     std::string timestamp = GetCurrentTimestampString();
+                    std::string dateFolder = GetDateFolderPath();
                     std::string filename = "Recording_" + timestamp + ".wav";
-                    std::string fullPath = recordingFolder + "\\" + filename;
+                    std::string fullPath = dateFolder + "\\" + filename;
                     
                     if (recorder.SaveToFile(fullPath)) {
                         // Create Metadata TXT
-                        std::string txtPath = recordingFolder + "\\" + "Recording_" + timestamp + ".txt";
+                        std::string txtPath = dateFolder + "\\" + "Recording_" + timestamp + ".txt";
                         std::ofstream txtFile(txtPath);
                         if (txtFile.is_open()) {
                             struct tm tmStart, tmEnd;

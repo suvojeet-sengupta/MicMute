@@ -54,7 +54,7 @@ bool isPressedClose = false;
 bool isPressedMin = false;
 
 // General Tab Controls
-HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck, hAutoRecordCheck;
+HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck, hNotifyCheck, hAutoRecordCheck;
 
 // Tab Labels
 const char* tabNames[] = { "General", "Hotkeys", "Audio", "Appearance" };
@@ -69,6 +69,7 @@ void UpdateControlVisibility() {
     ShowWindow(hOverlayCheck, showGeneral);
     ShowWindow(hMeterCheck, showGeneral);
     ShowWindow(hRecorderCheck, showGeneral);
+    ShowWindow(hNotifyCheck, showGeneral);
     ShowWindow(hAutoRecordCheck, showGeneral);
     
     // Repaint to clear/draw proper background
@@ -300,7 +301,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 contentX, startY + gapY*3, 300, 30, hWnd, (HMENU)ID_SHOW_RECORDER, hInst, NULL);
             SendMessage(hRecorderCheck, BM_SETCHECK, showRecorder ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hNotifyCheck = CreateWindow("BUTTON", "Show system notifications", 
+            hNotifyCheck = CreateWindow("BUTTON", "Show system notifications", 
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
                 contentX, startY + gapY*4, 300, 30, hWnd, (HMENU)ID_SHOW_NOTIFICATIONS, hInst, NULL);
             SendMessage(hNotifyCheck, BM_SETCHECK, showNotifications ? BST_CHECKED : BST_UNCHECKED, 0);
