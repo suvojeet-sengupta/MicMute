@@ -274,37 +274,51 @@ public:
     bool SetMute(bool mute) {
         std::lock_guard<std::mutex> lock(deviceMutex);
         
-        if (pEndpointVolume) {
-             LPWSTR wstrId = NULL;
-             if (pDefaultDevice) pDefaultDevice->GetId(&wstrId);
-             std::wstring deviceId = wstrId ? wstrId : L"Unknown";
-             if (wstrId) CoTaskMemFree(wstrId);
+        if (!pEnumerator) return false;
 
-            if (mute) {
-                // MUTE OPERATION
-                float currentVol = 0.0f;
-                pEndpointVolume->GetMasterVolumeLevelScalar(&currentVol);
-                
-                if (currentVol > 0.01f) {
-                    RegWriteVolume(deviceId, currentVol);
+        ComPtr<IMMDeviceCollection> pCollection;
+        HRESULT hr = pEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
+        
+        if (SUCCEEDED(hr) && pCollection) {
+            UINT count = 0;
+            pCollection->GetCount(&count);
+
+            for (UINT i = 0; i < count; i++) {
+                ComPtr<IMMDevice> pDevice;
+                if (SUCCEEDED(pCollection->Item(i, &pDevice))) {
+                    ComPtr<IAudioEndpointVolume> pVol;
+                    if (SUCCEEDED(pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pVol))) {
+                        LPWSTR wstrId = NULL;
+                        pDevice->GetId(&wstrId);
+                        std::wstring deviceId = wstrId ? wstrId : L"Unknown";
+                        if (wstrId) CoTaskMemFree(wstrId);
+
+                        if (mute) {
+                            // MUTE OPERATION
+                            float currentVol = 0.0f;
+                            pVol->GetMasterVolumeLevelScalar(&currentVol);
+                            
+                            // Only save if it's not already silenced
+                            if (currentVol > 0.01f) {
+                                RegWriteVolume(deviceId, currentVol);
+                            }
+                            
+                            pVol->SetMasterVolumeLevelScalar(0.0f, NULL);
+                            pVol->SetMute(TRUE, NULL);
+                        } else {
+                            // UNMUTE OPERATION
+                            float savedVol = RegReadVolume(deviceId);
+                            if (savedVol < 0.0f || savedVol > 1.0f) savedVol = 1.0f;
+                            
+                            pVol->SetMasterVolumeLevelScalar(savedVol, NULL);
+                            pVol->SetMute(FALSE, NULL);
+                        }
+                    }
                 }
-                
-                pEndpointVolume->SetMasterVolumeLevelScalar(0.0f, NULL);
-                pEndpointVolume->SetMute(TRUE, NULL);
-            } else {
-                // UNMUTE OPERATION
-                float savedVol = RegReadVolume(deviceId);
-                if (savedVol < 0.0f || savedVol > 1.0f) savedVol = 1.0f;
-                
-                pEndpointVolume->SetMasterVolumeLevelScalar(savedVol, NULL);
-                pEndpointVolume->SetMute(FALSE, NULL);
             }
-            
-            isMutedGlobal = mute;
-        } else {
-            // Try updating devices and retry?
-            // simplified: just ignored if no device
         }
+            
+        isMutedGlobal = mute;
         return mute;
     }
 
