@@ -657,8 +657,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 return HTCLIENT;
             }
 
-            // Draggable Header Area (Top 50px)
-            if (clientPt.y < 50) {
+            // Draggable Header Area (Top 60px)
+            if (clientPt.y < 60) {
                 return HTCAPTION;
             }
 
@@ -680,7 +680,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 ShowWindow(hWnd, SW_HIDE);
                 return 0;
             }
-            break;
+            return DefWindowProc(hWnd, msg, wParam, lParam);
 
         case WM_DESTROY:
             RemoveTrayIcon();
