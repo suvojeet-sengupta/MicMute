@@ -15,6 +15,7 @@ extern bool showOverlay;
 extern bool showMeter;
 extern bool showRecorder;
 extern bool showNotifications;
+extern bool autoRecordCalls;
 
 extern HFONT hFontTitle;
 extern HFONT hFontStatus;

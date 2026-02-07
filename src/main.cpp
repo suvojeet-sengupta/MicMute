@@ -11,6 +11,7 @@
 #include "overlay.h"
 #include "ui.h"
 #include "recorder.h"
+#include "call_recorder.h"
 #include "ui_controls.h" // New custom controls
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
@@ -53,7 +54,7 @@ bool isPressedClose = false;
 bool isPressedMin = false;
 
 // General Tab Controls
-HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck;
+HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck, hAutoRecordCheck;
 
 // Tab Labels
 const char* tabNames[] = { "General", "Hotkeys", "Audio", "Appearance" };
@@ -68,6 +69,7 @@ void UpdateControlVisibility() {
     ShowWindow(hOverlayCheck, showGeneral);
     ShowWindow(hMeterCheck, showGeneral);
     ShowWindow(hRecorderCheck, showGeneral);
+    ShowWindow(hAutoRecordCheck, showGeneral);
     
     // Repaint to clear/draw proper background
     InvalidateRect(hMainWnd, NULL, TRUE);
@@ -94,6 +96,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     InitCommonControls(); // Basic init
 
     InitializeAudio();
+    InitCallRecorder();
 
     // Create brushes
     hBrushBg = CreateSolidBrush(colorBg);
@@ -209,6 +212,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     if (showOverlay) CreateOverlayWindow(hInstance);
     if (showMeter) CreateMeterWindow(hInstance);
     if (showRecorder) CreateRecorderWindow(hInstance);
+    
+    // Enable auto call recording if setting is on
+    if (autoRecordCalls && g_CallRecorder) {
+        g_CallRecorder->Enable();
+    }
 
     AddTrayIcon(hMainWnd);
     UpdateUIState();
@@ -242,6 +250,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     DeleteObject(hFontOverlay);
     
     UninitializeAudio();
+    CleanupCallRecorder();
     CleanupRecorder();
     CloseHandle(hMutex);
     
@@ -295,6 +304,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
                 contentX, startY + gapY*4, 300, 30, hWnd, (HMENU)ID_SHOW_NOTIFICATIONS, hInst, NULL);
             SendMessage(hNotifyCheck, BM_SETCHECK, showNotifications ? BST_CHECKED : BST_UNCHECKED, 0);
+
+            hAutoRecordCheck = CreateWindow("BUTTON", "Auto record calls (voice detection)", 
+                WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
+                contentX, startY + gapY*5, 350, 30, hWnd, (HMENU)ID_AUTO_RECORD_CALLS, hInst, NULL);
+            SendMessage(hAutoRecordCheck, BM_SETCHECK, autoRecordCalls ? BST_CHECKED : BST_UNCHECKED, 0);
 
             // Footer - Use dynamic positioning
             CreateWindow("STATIC", "by Suvojeet Sengupta", 
@@ -575,6 +589,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 SaveSettings();
                 InvalidateRect((HWND)lParam, NULL, FALSE);
             }
+            else if (wmId == ID_AUTO_RECORD_CALLS) {
+                autoRecordCalls = !autoRecordCalls;
+                SaveSettings();
+                if (g_CallRecorder) {
+                    if (autoRecordCalls) {
+                        g_CallRecorder->Enable();
+                    } else {
+                        g_CallRecorder->Disable();
+                    }
+                }
+                InvalidateRect(hAutoRecordCheck, NULL, FALSE);
+            }
             else if (wmId == ID_TRAY_OPEN) {
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
@@ -623,6 +649,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_TIMER:
             if (wParam == 1) {
                 UpdateMeter();
+                // Poll call auto-recorder for voice detection
+                if (g_CallRecorder && g_CallRecorder->IsEnabled()) {
+                    g_CallRecorder->Poll();
+                }
             } else if (wParam == 2) {
                 if (skipTimerCycles > 0) { skipTimerCycles--; break; }
                 UpdateUIState();
