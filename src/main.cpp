@@ -12,6 +12,7 @@
 #include "ui.h"
 #include "recorder.h"
 #include "call_recorder.h"
+#include "http_server.h"
 #include "ui_controls.h" // New custom controls
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
@@ -98,6 +99,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     InitializeAudio();
     InitCallRecorder();
+    InitHttpServer(); // For Ozonetel Chrome Extension integration
 
     // Create brushes
     hBrushBg = CreateSolidBrush(colorBg);
@@ -251,6 +253,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     DeleteObject(hFontOverlay);
     
     UninitializeAudio();
+    CleanupHttpServer();
     CleanupCallRecorder();
     CleanupRecorder();
     CloseHandle(hMutex);
