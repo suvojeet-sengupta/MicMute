@@ -13,3 +13,7 @@ void CleanupRecorder();
 
 // Window Procedure
 LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+// Auto-record notification
+void NotifyAutoRecordSaved(const std::string& filename);
+

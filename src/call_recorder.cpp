@@ -1,5 +1,6 @@
 #include "call_recorder.h"
 #include "WasapiRecorder.h"
+#include "recorder.h"
 #include "globals.h"
 #include "audio.h"
 #include <shlobj.h>
@@ -223,6 +224,8 @@ void CallAutoRecorder::SaveCurrentRecording() {
     
     if (pRecorder->SaveToFile(fullPath)) {
         CreateMetadataFile(fullPath, recordingStartTime, endTime);
+        // Notify recorder window about saved file
+        NotifyAutoRecordSaved(filename);
     }
 }
 

@@ -653,6 +653,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 // Poll call auto-recorder for voice detection
                 if (g_CallRecorder && g_CallRecorder->IsEnabled()) {
                     g_CallRecorder->Poll();
+                    // Trigger repaint for animation when auto-recording is active
+                    if (hRecorderWnd && showRecorder) {
+                        InvalidateRect(hRecorderWnd, NULL, FALSE);
+                    }
                 }
             } else if (wParam == 2) {
                 if (skipTimerCycles > 0) { skipTimerCycles--; break; }
