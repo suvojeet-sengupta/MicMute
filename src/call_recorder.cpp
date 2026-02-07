@@ -53,9 +53,10 @@ CallAutoRecorder::CallAutoRecorder()
     , lastVoiceTime(0)
     , recordingStartTick(0)
     , recordingStartTime(0)
-    , voiceThreshold(0.05f)      // 5% audio level
-    , silenceTimeoutMs(3000)     // 3 seconds silence
-    , minCallDurationMs(1000)    // 1 second minimum
+    , voiceThreshold(0.03f)      // 3% audio level (more sensitive)
+    , silenceTimeoutMs(30000)    // 30 seconds silence (robust for pauses)
+    , minCallDurationMs(10000)   // 10 seconds minimum to be a valid call
+    , gracePeriodMs(15000)       // 15 seconds grace - no silence check initially
     , todayCallCount(0)
     , pRecorder(nullptr)
 {
@@ -130,7 +131,17 @@ void CallAutoRecorder::Poll() {
                 lastVoiceTime = now;
             }
             
-            // Check for silence timeout
+            // Grace period: don't check for silence in the initial period after recording starts
+            // This prevents premature call ending when there's initial silence
+            {
+                DWORD elapsed = now - recordingStartTick;
+                if (elapsed < (DWORD)gracePeriodMs) {
+                    // Still in grace period, don't check for silence timeout
+                    break;
+                }
+            }
+            
+            // Check for silence timeout (only after grace period)
             if (lastVoiceTime > 0 && (now - lastVoiceTime) >= (DWORD)silenceTimeoutMs) {
                 OnSilenceTimeout();
             }

@@ -46,6 +46,10 @@ public:
     
     void SetMinCallDurationMs(int ms) { minCallDurationMs = ms; }
     int GetMinCallDurationMs() const { return minCallDurationMs; }
+    
+    // Grace period: no silence detection during initial call period
+    void SetGracePeriodMs(int ms) { gracePeriodMs = ms; }
+    int GetGracePeriodMs() const { return gracePeriodMs; }
 
 private:
     void TransitionTo(State newState);
@@ -70,6 +74,7 @@ private:
     float voiceThreshold;     // Audio level threshold (0.0-1.0)
     int silenceTimeoutMs;     // Silence duration to end call
     int minCallDurationMs;    // Minimum call duration to save
+    int gracePeriodMs;        // No silence check during this initial period
     
     // Statistics
     int todayCallCount;
