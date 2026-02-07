@@ -186,7 +186,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             // Calc text width
             const char* text = showMuted ? "MUTED" : "LIVE";
             SIZE textSize;
-            GetTextExtentPoint32(hdc, text, strlen(text), &textSize);
+            GetTextExtentPoint32(hdc, text, (int)strlen(text), &textSize);
             
             int contentWidth = iconSize + padding/2 + textSize.cx;
             int startX = (rect.right - contentWidth) / 2;
