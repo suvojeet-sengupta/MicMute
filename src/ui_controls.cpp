@@ -77,6 +77,7 @@ void DrawToggle(LPDRAWITEMSTRUCT lpDrawItem) {
     else if (id == ID_SHOW_METER) isChecked = showMeter;
     else if (id == ID_SHOW_RECORDER) isChecked = showRecorder;
     else if (id == ID_SHOW_NOTIFICATIONS) isChecked = showNotifications;
+    else if (id == ID_AUTO_RECORD_CALLS) isChecked = autoRecordCalls;
     
     // Clear Background - use parent's background for Mica effect
     // Get parent DC to maintain transparency
