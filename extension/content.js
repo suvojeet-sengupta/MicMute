@@ -143,6 +143,11 @@
     // Poll every 500ms for status changes
     setInterval(checkStatusAndTrigger, 500);
 
+    // Send heartbeat ping every 2 seconds to maintain connection
+    setInterval(() => {
+        signalMicMute('ping').catch(() => { });
+    }, 2000);
+
     // Also watch for DOM mutations
     const observer = new MutationObserver(() => {
         checkStatusAndTrigger();

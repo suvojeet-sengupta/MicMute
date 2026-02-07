@@ -27,11 +27,15 @@ public:
     void Disable();
     bool IsEnabled() const { return enabled; }
 
-    // Called periodically from UI timer (~100ms)
+    // Called periodically from UI timer (~100ms - now only for UI updates, no VAD)
     void Poll();
 
     // Get current state
     State GetState() const { return currentState; }
+    
+    // Force start/stop from external source (HTTP server)
+    void ForceStartRecording();
+    void ForceStopRecording();
     
     // Statistics
     int GetTodayCallCount() const { return todayCallCount; }

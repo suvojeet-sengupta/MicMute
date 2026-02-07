@@ -111,52 +111,8 @@ void CallAutoRecorder::Poll() {
         todayCallCount = 0;
     }
     
-    // Get current audio levels
-    float micLevel = GetMicLevel();
-    float speakerLevel = GetSpeakerLevel();
-    float maxLevel = (micLevel > speakerLevel) ? micLevel : speakerLevel;
-    
-    DWORD now = GetTickCount();
-    
-    switch (currentState) {
-        case State::DETECTING:
-            // Check if voice detected
-            if (maxLevel >= voiceThreshold) {
-                OnVoiceDetected();
-            }
-            break;
-            
-        case State::RECORDING:
-            // Update last voice time if audio detected
-            if (maxLevel >= voiceThreshold) {
-                lastVoiceTime = now;
-            }
-            
-            // Grace period: don't check for silence in the initial period after recording starts
-            // This prevents premature call ending when there's initial silence
-            {
-                DWORD elapsed = now - recordingStartTick;
-                if (elapsed < (DWORD)gracePeriodMs) {
-                    // Still in grace period, don't check for silence timeout
-                    break;
-                }
-            }
-            
-            // Check for silence timeout (only after grace period)
-            if (lastVoiceTime > 0 && (now - lastVoiceTime) >= (DWORD)silenceTimeoutMs) {
-                OnSilenceTimeout();
-            }
-            break;
-            
-        case State::SAVING:
-            // Brief state, should transition back to DETECTING
-            TransitionTo(State::DETECTING);
-            break;
-            
-        case State::IDLE:
-            // Do nothing
-            break;
-    }
+    // No VAD - recording is controlled by HTTP server (extension signals)
+    // Poll() is now only for date tracking and UI updates
 }
 
 void CallAutoRecorder::OnVoiceDetected() {
@@ -189,6 +145,47 @@ void CallAutoRecorder::OnSilenceTimeout() {
     pRecorder->Clear();
     
     // Ready for next call
+    TransitionTo(State::DETECTING);
+}
+
+// Force start recording from external trigger (HTTP server)
+void CallAutoRecorder::ForceStartRecording() {
+    if (!pRecorder) return;
+    
+    // If already recording, do nothing
+    if (currentState == State::RECORDING) return;
+    
+    // Start recording immediately
+    if (pRecorder->Start()) {
+        recordingStartTick = GetTickCount();
+        recordingStartTime = std::time(nullptr);
+        lastVoiceTime = recordingStartTick;
+        TransitionTo(State::RECORDING);
+    }
+}
+
+// Force stop recording from external trigger (HTTP server)
+void CallAutoRecorder::ForceStopRecording() {
+    if (!pRecorder) return;
+    
+    // If not recording, do nothing
+    if (currentState != State::RECORDING) return;
+    
+    TransitionTo(State::SAVING);
+    
+    // Stop recording
+    pRecorder->Stop();
+    
+    // Save if long enough
+    DWORD duration = GetTickCount() - recordingStartTick;
+    if (duration >= (DWORD)minCallDurationMs) {
+        SaveCurrentRecording();
+    }
+    
+    // Clear buffer for next call
+    pRecorder->Clear();
+    
+    // Ready for next call (waiting for extension signal)
     TransitionTo(State::DETECTING);
 }
 

@@ -19,3 +19,14 @@ void CleanupHttpServer();
 
 // Check if server is running
 bool IsHttpServerRunning();
+
+// Check if extension is connected (heartbeat received recently)
+bool IsExtensionConnected();
+
+// Get time since last heartbeat in milliseconds
+DWORD GetTimeSinceLastHeartbeat();
+
+// Force start/stop recording (called by HTTP endpoints)
+void HttpForceStartRecording();
+void HttpForceStopRecording();
+

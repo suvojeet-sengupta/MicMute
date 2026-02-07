@@ -14,6 +14,11 @@ static SOCKET serverSocket = INVALID_SOCKET;
 static std::atomic<bool> serverRunning(false);
 static std::thread serverThread;
 
+// Extension connection tracking
+static DWORD lastHeartbeatTime = 0;
+static std::atomic<bool> extensionConnected(false);
+#define HEARTBEAT_TIMEOUT_MS 5000  // 5 seconds without heartbeat = disconnected
+
 // Send HTTP response
 void SendResponse(SOCKET client, int statusCode, const char* statusText, const char* body) {
     char response[1024];
@@ -56,23 +61,24 @@ void HandleRequest(SOCKET client) {
     
     // Handle POST requests
     if (strcmp(method, "POST") == 0) {
-        if (strcmp(path, "/start") == 0) {
-            // Start recording
-            if (g_CallRecorder && !g_CallRecorder->IsEnabled()) {
-                g_CallRecorder->Enable();
-            }
-            // Force start recording immediately
-            if (g_CallRecorder) {
-                // Trigger voice detection manually for immediate start
-                g_CallRecorder->Poll();
-            }
+        if (strcmp(path, "/ping") == 0) {
+            // Heartbeat from extension - update connection status
+            lastHeartbeatTime = GetTickCount();
+            extensionConnected = true;
+            SendResponse(client, 200, "OK", "{\"status\":\"pong\",\"connected\":true}");
+        }
+        else if (strcmp(path, "/start") == 0) {
+            // Start recording via extension signal
+            lastHeartbeatTime = GetTickCount();
+            extensionConnected = true;
+            HttpForceStartRecording();
             SendResponse(client, 200, "OK", "{\"status\":\"recording_started\"}");
         }
         else if (strcmp(path, "/stop") == 0) {
-            // Stop recording and save
-            if (g_CallRecorder && g_CallRecorder->IsEnabled()) {
-                g_CallRecorder->Disable();
-            }
+            // Stop recording and save via extension signal
+            lastHeartbeatTime = GetTickCount();
+            extensionConnected = true;
+            HttpForceStopRecording();
             SendResponse(client, 200, "OK", "{\"status\":\"recording_stopped\"}");
         }
         else if (strcmp(path, "/status") == 0) {
@@ -82,11 +88,12 @@ void HandleRequest(SOCKET client) {
                 if (g_CallRecorder->GetState() == CallAutoRecorder::State::RECORDING) {
                     status = "recording";
                 } else if (g_CallRecorder->IsEnabled()) {
-                    status = "detecting";
+                    status = "waiting";
                 }
             }
             char body[128];
-            snprintf(body, sizeof(body), "{\"status\":\"%s\"}", status);
+            snprintf(body, sizeof(body), "{\"status\":\"%s\",\"connected\":%s}", 
+                     status, extensionConnected ? "true" : "false");
             SendResponse(client, 200, "OK", body);
         }
         else {
@@ -184,3 +191,35 @@ void CleanupHttpServer() {
 bool IsHttpServerRunning() {
     return serverRunning && serverSocket != INVALID_SOCKET;
 }
+
+bool IsExtensionConnected() {
+    if (!extensionConnected) return false;
+    
+    // Check if heartbeat timed out
+    DWORD now = GetTickCount();
+    if (lastHeartbeatTime > 0 && (now - lastHeartbeatTime) > HEARTBEAT_TIMEOUT_MS) {
+        extensionConnected = false;
+        return false;
+    }
+    return true;
+}
+
+DWORD GetTimeSinceLastHeartbeat() {
+    if (lastHeartbeatTime == 0) return UINT_MAX;
+    return GetTickCount() - lastHeartbeatTime;
+}
+
+void HttpForceStartRecording() {
+    if (!g_CallRecorder) return;
+    
+    // Force the recorder to start recording immediately
+    g_CallRecorder->ForceStartRecording();
+}
+
+void HttpForceStopRecording() {
+    if (!g_CallRecorder) return;
+    
+    // Force stop and save
+    g_CallRecorder->ForceStopRecording();
+}
+

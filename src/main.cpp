@@ -313,10 +313,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 contentX, startY + gapY*4, 300, 30, hWnd, (HMENU)ID_SHOW_NOTIFICATIONS, hInst, NULL);
             SendMessage(hNotifyCheck, BM_SETCHECK, showNotifications ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            hAutoRecordCheck = CreateWindow("BUTTON", "Auto record calls (voice detection)", 
+            hAutoRecordCheck = CreateWindow("BUTTON", "Auto record calls (Ozonetel)", 
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
                 contentX, startY + gapY*5, 350, 30, hWnd, (HMENU)ID_AUTO_RECORD_CALLS, hInst, NULL);
             SendMessage(hAutoRecordCheck, BM_SETCHECK, autoRecordCalls ? BST_CHECKED : BST_UNCHECKED, 0);
+            
+            // Extension connection status (shown when Auto Record is enabled)
+            CreateWindow("STATIC", "", 
+                WS_CHILD | SS_LEFT, 
+                contentX, startY + gapY*6, 350, 20, hWnd, (HMENU)9998, hInst, NULL);
 
             // Footer - Use dynamic positioning
             CreateWindow("STATIC", "by Suvojeet Sengupta", 
@@ -657,12 +662,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_TIMER:
             if (wParam == 1) {
                 UpdateMeter();
-                // Poll call auto-recorder for voice detection
+                // Poll call auto-recorder (date tracking only, no VAD)
                 if (g_CallRecorder && g_CallRecorder->IsEnabled()) {
                     g_CallRecorder->Poll();
                     // Trigger repaint for animation when auto-recording is active
                     if (hRecorderWnd && showRecorder) {
                         InvalidateRect(hRecorderWnd, NULL, FALSE);
+                    }
+                }
+                
+                // Update extension connection status display
+                if (autoRecordCalls) {
+                    HWND hStatus = GetDlgItem(hMainWnd, 9998);
+                    if (hStatus) {
+                        ShowWindow(hStatus, SW_SHOW);
+                        if (IsExtensionConnected()) {
+                            SetWindowText(hStatus, "✓ Extension Connected");
+                        } else {
+                            SetWindowText(hStatus, "⏳ Waiting for Extension...");
+                        }
+                    }
+                } else {
+                    HWND hStatus = GetDlgItem(hMainWnd, 9998);
+                    if (hStatus) {
+                        ShowWindow(hStatus, SW_HIDE);
                     }
                 }
             } else if (wParam == 2) {
