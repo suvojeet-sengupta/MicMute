@@ -7,13 +7,15 @@
     "activeTab"
   ],
   "host_permissions": [
-    "https://*.ozonetel.com/*",
+    "*://*.ozonetel.com/*",
+    "*://*.dishtv.ozonetel.com/*",
     "http://localhost:9876/*"
   ],
   "content_scripts": [
     {
       "matches": [
-        "https://*.ozonetel.com/*"
+        "*://*.ozonetel.com/*",
+        "*://*.dishtv.ozonetel.com/*"
       ],
       "js": [
         "content.js"
