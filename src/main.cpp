@@ -49,6 +49,8 @@ RECT rcClose = {0};
 RECT rcMin = {0};
 bool isHoverClose = false;
 bool isHoverMin = false;
+bool isPressedClose = false;
+bool isPressedMin = false;
 
 // General Tab Controls
 HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck;
@@ -294,10 +296,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 contentX, startY + gapY*4, 300, 30, hWnd, (HMENU)ID_SHOW_NOTIFICATIONS, hInst, NULL);
             SendMessage(hNotifyCheck, BM_SETCHECK, showNotifications ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            // Footer
-            RECT rcClient; GetClientRect(hWnd, &rcClient); // Note: Client Rect not available in CREATE? Width is known though.
+            // Footer - Use dynamic positioning
             CreateWindow("STATIC", "by Suvojeet Sengupta", 
-                 WS_VISIBLE | WS_CHILD | SS_RIGHT, 850 - 160, 600 - 60, 140, 20, hWnd, NULL, hInst, NULL);
+                 WS_VISIBLE | WS_CHILD | SS_RIGHT, 0, 0, 0, 0, hWnd, (HMENU)9999, hInst, NULL);
 
             UpdateControlVisibility();
             break;
@@ -361,8 +362,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             rcClose = {rcClient.right - btnW, 0, rcClient.right, btnH};
             rcMin = {rcClose.left - btnW, 0, rcClose.left, btnH};
 
-            // Close Button
-            if (isHoverClose) {
+            // Close Button - proper state handling
+            if (isPressedClose) {
+                HBRUSH hPressed = CreateSolidBrush(RGB(196, 43, 28)); // Darker red on press
+                FillRect(hdc, &rcClose, hPressed);
+                DeleteObject(hPressed);
+                SetTextColor(hdc, RGB(255, 255, 255));
+            } else if (isHoverClose) {
                 HBRUSH hRed = CreateSolidBrush(RGB(232, 17, 35));
                 FillRect(hdc, &rcClose, hRed);
                 DeleteObject(hRed);
@@ -370,13 +376,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             } else {
                 SetTextColor(hdc, colorText);
             }
-            SelectObject(hdc, hFontNormal); // Use normal font for symbols
-            DrawText(hdc, "\x72", 1, &rcClose, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX); // Webdings 'r' = X (Need correct font or simple X)
-            // Actually simpler to use simple X/Min text with Segoe UI
+            SelectObject(hdc, hFontNormal);
             DrawText(hdc, "X", 1, &rcClose, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
 
-            // Minimize Button
-            if (isHoverMin) {
+            // Minimize Button - proper state handling
+            if (isPressedMin) {
+                HBRUSH hPressed = CreateSolidBrush(RGB(70, 70, 70)); // Darker on press
+                FillRect(hdc, &rcMin, hPressed);
+                DeleteObject(hPressed);
+            } else if (isHoverMin) {
                 HBRUSH hHover = CreateSolidBrush(RGB(50, 50, 50));
                 FillRect(hdc, &rcMin, hHover);
                 DeleteObject(hHover);
@@ -461,13 +469,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             int y = HIWORD(lParam);
             POINT pt = {x, y};
 
-            // Caption Buttons
+            // Caption Buttons - track pressed state
             if (PtInRect(&rcClose, pt)) {
-                SendMessage(hWnd, WM_CLOSE, 0, 0); // Or minimize to tray depending on settings
+                isPressedClose = true;
+                SetCapture(hWnd);
+                InvalidateRect(hWnd, &rcClose, FALSE);
                 return 0;
             }
             if (PtInRect(&rcMin, pt)) {
-                ShowWindow(hWnd, SW_MINIMIZE);
+                isPressedMin = true;
+                SetCapture(hWnd);
+                InvalidateRect(hWnd, &rcMin, FALSE);
                 return 0;
             }
             
@@ -478,12 +490,37 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (y >= itemTop && y < itemBottom) {
                         currentTab = i;
                         UpdateControlVisibility();
-                        // Invalidate full window to redraw title/content
                         InvalidateRect(hWnd, NULL, TRUE); 
                         break;
                     }
                 }
             }
+            break;
+        }
+
+        case WM_LBUTTONUP: {
+            int x = LOWORD(lParam);
+            int y = HIWORD(lParam);
+            POINT pt = {x, y};
+            
+            ReleaseCapture();
+            
+            // Handle caption button clicks on release
+            if (isPressedClose && PtInRect(&rcClose, pt)) {
+                isPressedClose = false;
+                SendMessage(hWnd, WM_CLOSE, 0, 0);
+                return 0;
+            }
+            if (isPressedMin && PtInRect(&rcMin, pt)) {
+                isPressedMin = false;
+                ShowWindow(hWnd, SW_MINIMIZE);
+                return 0;
+            }
+            
+            isPressedClose = false;
+            isPressedMin = false;
+            RECT rcBtns = {rcMin.left, 0, rcClose.right, rcClose.bottom};
+            InvalidateRect(hWnd, &rcBtns, FALSE);
             break;
         }
 
@@ -568,6 +605,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, hWnd, NULL);
                 DestroyMenu(hMenu);
             }
+            break;
+        }
+
+        case WM_SIZE: {
+            // Reposition footer dynamically
+            RECT rcClient;
+            GetClientRect(hWnd, &rcClient);
+            HWND hFooter = GetDlgItem(hWnd, 9999);
+            if (hFooter) {
+                MoveWindow(hFooter, rcClient.right - 160, rcClient.bottom - 40, 140, 20, TRUE);
+            }
+            InvalidateRect(hWnd, NULL, TRUE);
             break;
         }
 

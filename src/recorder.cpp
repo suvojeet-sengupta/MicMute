@@ -159,10 +159,13 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             
         case WM_SIZE: {
             LayoutRecorderUI(hWnd);
-            // Repaint
-            InvalidateRect(hWnd, NULL, TRUE);
+            // Repaint without erase to prevent flicker
+            InvalidateRect(hWnd, NULL, FALSE);
             break; 
         }
+
+        case WM_ERASEBKGND:
+            return 1; // Prevent flicker - we handle background in WM_PAINT
 
         case WM_COMMAND: {
             int id = LOWORD(wParam);
@@ -236,26 +239,40 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             HDC hdc = BeginPaint(hWnd, &ps);
             
             RECT rect; GetClientRect(hWnd, &rect);
-            FillRect(hdc, &rect, hBrushBg);
+            
+            // Double-buffering to prevent flicker
+            HDC hdcMem = CreateCompatibleDC(hdc);
+            HBITMAP hbmMem = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
+            HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hbmMem);
+            
+            // Background
+            FillRect(hdcMem, &rect, hBrushBg);
             
             // Draw Status Text
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, colorText);
-            SelectObject(hdc, hFontStatus); // Using hFontStatus for status
+            SetBkMode(hdcMem, TRANSPARENT);
+            SetTextColor(hdcMem, colorText);
+            SelectObject(hdcMem, hFontStatus);
             
             // Dynamically calculate centering
-            // We want it above the buttons, roughly middle of the remaining space
             float scale = GetWindowScale(hWnd);
-            int btnAreaHeight = (int)(36 * scale + 40 * scale); // Button height + margins
+            int btnAreaHeight = (int)(36 * scale + 40 * scale);
             RECT textRect = rect;
-            textRect.bottom -= btnAreaHeight; // Leave room for buttons
+            textRect.bottom -= btnAreaHeight;
             
             if (recorder.IsRecording()) {
-                if (recorder.IsPaused()) DrawText(hdc, "PAUSED", -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                else DrawText(hdc, "RECORDING...", -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                if (recorder.IsPaused()) DrawText(hdcMem, "PAUSED", -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                else DrawText(hdcMem, "RECORDING...", -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             } else {
-                DrawText(hdc, "Ready", -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                DrawText(hdcMem, "Ready", -1, &textRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             }
+            
+            // Blit to screen
+            BitBlt(hdc, 0, 0, rect.right, rect.bottom, hdcMem, 0, 0, SRCCOPY);
+            
+            // Cleanup
+            SelectObject(hdcMem, hbmOld);
+            DeleteObject(hbmMem);
+            DeleteDC(hdcMem);
             
             EndPaint(hWnd, &ps);
             return 0;

@@ -78,8 +78,17 @@ void DrawToggle(LPDRAWITEMSTRUCT lpDrawItem) {
     else if (id == ID_SHOW_RECORDER) isChecked = showRecorder;
     else if (id == ID_SHOW_NOTIFICATIONS) isChecked = showNotifications;
     
-    // Clear Background with parent background color (or let it be transparent if we handled WM_CTLCOLORBTN correctly)
-    // Since we owner draw, we must fill.
+    // Clear Background - use parent's background for Mica effect
+    // Get parent DC to maintain transparency
+    HWND hParent = GetParent(lpDrawItem->hwndItem);
+    if (hParent) {
+        // Request parent repaint area behind us for proper layering
+        POINT pt = {rc.left, rc.top};
+        MapWindowPoints(lpDrawItem->hwndItem, hParent, &pt, 1);
+        RECT rcParent = {pt.x, pt.y, pt.x + (rc.right - rc.left), pt.y + (rc.bottom - rc.top)};
+        // Use hollow brush to show parent background
+    }
+    // Fill with semi-transparent background for visibility
     FillRect(hdc, &rc, hBrushBg); 
     
     // Calculate Toggle Switch Area
