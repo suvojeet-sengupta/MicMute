@@ -283,7 +283,50 @@ static inline short FloatToShort(float sample) {
     return (short)sample;
 }
 
-// Mix both buffers into stereo output (mic=left+right mixed with loopback)
+// Helper: Get sample from buffer at frame index (handles float/PCM, mono-mixes channels)
+static float GetSampleFromBuffer(const std::vector<BYTE>& buffer, size_t frameIndex, 
+                                  WAVEFORMATEX* pwfx, bool isFloat) {
+    if (frameIndex >= buffer.size() / pwfx->nBlockAlign) return 0.0f;
+    
+    float sample = 0.0f;
+    size_t offset = frameIndex * pwfx->nBlockAlign;
+    
+    if (isFloat) {
+        float* ptr = (float*)(buffer.data() + offset);
+        for (int ch = 0; ch < pwfx->nChannels; ch++) {
+            sample += ptr[ch];
+        }
+        sample /= pwfx->nChannels;
+    } else {
+        short* ptr = (short*)(buffer.data() + offset);
+        for (int ch = 0; ch < pwfx->nChannels; ch++) {
+            sample += ptr[ch] / 32768.0f;
+        }
+        sample /= pwfx->nChannels;
+    }
+    return sample;
+}
+
+// Linear interpolation for resampling
+static float InterpolateSample(const std::vector<BYTE>& buffer, double position,
+                                WAVEFORMATEX* pwfx, bool isFloat) {
+    size_t totalFrames = buffer.size() / pwfx->nBlockAlign;
+    if (totalFrames == 0) return 0.0f;
+    
+    size_t idx0 = (size_t)position;
+    size_t idx1 = idx0 + 1;
+    double frac = position - idx0;
+    
+    if (idx0 >= totalFrames) return 0.0f;
+    if (idx1 >= totalFrames) idx1 = idx0;
+    
+    float s0 = GetSampleFromBuffer(buffer, idx0, pwfx, isFloat);
+    float s1 = GetSampleFromBuffer(buffer, idx1, pwfx, isFloat);
+    
+    return s0 + (float)(frac * (s1 - s0));
+}
+
+// Mix both buffers with proper sample rate handling
 std::vector<BYTE> WasapiRecorder::MixBuffers() {
     std::vector<BYTE> output;
     
@@ -293,7 +336,7 @@ std::vector<BYTE> WasapiRecorder::MixBuffers() {
     
     if (!pwfxMic || !pwfxLoopback) return output;
     
-    // Calculate number of samples in each buffer
+    // Detect format types
     bool micIsFloat = false;
     bool loopIsFloat = false;
     
@@ -309,54 +352,56 @@ std::vector<BYTE> WasapiRecorder::MixBuffers() {
         if (IsEqualGUID(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, pEx->SubFormat)) loopIsFloat = true;
     }
     
+    // Get sample rates
+    int micSampleRate = pwfxMic->nSamplesPerSec;
+    int loopSampleRate = pwfxLoopback->nSamplesPerSec;
+    
+    // Use loopback sample rate as output (it's usually system default)
+    int outputSampleRate = loopSampleRate;
+    
     // Calculate frame counts
     size_t micFrames = micBuffer.size() / pwfxMic->nBlockAlign;
     size_t loopFrames = loopbackBuffer.size() / pwfxLoopback->nBlockAlign;
-    size_t maxFrames = (micFrames > loopFrames) ? micFrames : loopFrames;
+    
+    // Calculate duration in seconds for each buffer
+    double micDuration = (micFrames > 0) ? (double)micFrames / micSampleRate : 0.0;
+    double loopDuration = (loopFrames > 0) ? (double)loopFrames / loopSampleRate : 0.0;
+    double maxDuration = (micDuration > loopDuration) ? micDuration : loopDuration;
+    
+    // Output frames based on output sample rate
+    size_t outputFrames = (size_t)(maxDuration * outputSampleRate);
+    if (outputFrames == 0) return output;
+    
+    // Log sample rates for debugging
+    char debugBuf[256];
+    snprintf(debugBuf, sizeof(debugBuf), 
+        "[WasapiRecorder] Mixing: Mic=%dHz (%zu frames), Loop=%dHz (%zu frames), Output=%dHz (%zu frames)\n",
+        micSampleRate, micFrames, loopSampleRate, loopFrames, outputSampleRate, outputFrames);
+    OutputDebugStringA(debugBuf);
     
     // Output: 16-bit stereo
-    output.resize(maxFrames * 4); // 2 channels * 2 bytes per sample
+    output.resize(outputFrames * 4); // 2 channels * 2 bytes per sample
     short* outPtr = (short*)output.data();
     
-    for (size_t i = 0; i < maxFrames; i++) {
+    for (size_t i = 0; i < outputFrames; i++) {
+        // Calculate position in time (0.0 to maxDuration)
+        double timePos = (double)i / outputSampleRate;
+        
+        // Get mic sample (resample to output rate)
         float micSample = 0.0f;
+        if (micFrames > 0 && timePos <= micDuration) {
+            double micPos = timePos * micSampleRate;
+            micSample = InterpolateSample(micBuffer, micPos, pwfxMic, micIsFloat);
+        }
+        
+        // Get loopback sample (already at output rate, no resampling needed)
         float loopSample = 0.0f;
-        
-        // Get mic sample (mono mix of all channels)
-        if (i < micFrames) {
-            if (micIsFloat) {
-                float* micPtr = (float*)(micBuffer.data() + i * pwfxMic->nBlockAlign);
-                for (int ch = 0; ch < pwfxMic->nChannels; ch++) {
-                    micSample += micPtr[ch];
-                }
-                micSample /= pwfxMic->nChannels;
-            } else {
-                short* micPtr = (short*)(micBuffer.data() + i * pwfxMic->nBlockAlign);
-                for (int ch = 0; ch < pwfxMic->nChannels; ch++) {
-                    micSample += micPtr[ch] / 32768.0f;
-                }
-                micSample /= pwfxMic->nChannels;
-            }
+        if (loopFrames > 0 && timePos <= loopDuration) {
+            double loopPos = timePos * loopSampleRate;
+            loopSample = InterpolateSample(loopbackBuffer, loopPos, pwfxLoopback, loopIsFloat);
         }
         
-        // Get loopback sample (mono mix of all channels)
-        if (i < loopFrames) {
-            if (loopIsFloat) {
-                float* loopPtr = (float*)(loopbackBuffer.data() + i * pwfxLoopback->nBlockAlign);
-                for (int ch = 0; ch < pwfxLoopback->nChannels; ch++) {
-                    loopSample += loopPtr[ch];
-                }
-                loopSample /= pwfxLoopback->nChannels;
-            } else {
-                short* loopPtr = (short*)(loopbackBuffer.data() + i * pwfxLoopback->nBlockAlign);
-                for (int ch = 0; ch < pwfxLoopback->nChannels; ch++) {
-                    loopSample += loopPtr[ch] / 32768.0f;
-                }
-                loopSample /= pwfxLoopback->nChannels;
-            }
-        }
-        
-        // Mix both into stereo (both sources in both channels)
+        // Mix both sources
         float mixed = (micSample + loopSample) * 0.5f;
         short outSample = FloatToShort(mixed);
         
@@ -366,6 +411,7 @@ std::vector<BYTE> WasapiRecorder::MixBuffers() {
     
     return output;
 }
+
 
 void WasapiRecorder::WriteWavHeader(std::ofstream& file, int totalDataLen, int sampleRate, int channels, int bitsPerSample) {
     int byteRate = sampleRate * channels * bitsPerSample / 8;
