@@ -3,20 +3,22 @@
   "name": "MicMute Ozonetel Connector",
   "version": "1.0.0",
   "description": "Automatically triggers MicMute call recording when Ozonetel call is active",
-  "permissions": ["activeTab"],
+  "permissions": [
+    "activeTab"
+  ],
   "host_permissions": [
     "https://*.ozonetel.com/*",
     "http://localhost:9876/*"
   ],
   "content_scripts": [
     {
-      "matches": ["https://*.ozonetel.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://*.ozonetel.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_end"
     }
-  ],
-  "icons": {
-    "48": "icon48.png",
-    "128": "icon128.png"
-  }
+  ]
 }
