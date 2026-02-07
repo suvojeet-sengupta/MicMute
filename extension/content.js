@@ -137,18 +137,52 @@
     // Start monitoring
     console.log('[MicMute Connector] Ozonetel integration active');
 
+    // --- Web Worker Based Timer Implementation ---
+    // This allows the timer to run in the background more reliably than setInterval on the main thread
+
+    const workerScript = `
+        let timerId = null;
+        let pingId = null;
+
+        self.onmessage = function(e) {
+            if (e.data === 'start') {
+                if (timerId) clearInterval(timerId);
+                if (pingId) clearInterval(pingId);
+                
+                // Poll checkStatusAndTrigger every 500ms
+                timerId = setInterval(() => {
+                    self.postMessage('tick');
+                }, 500);
+
+                // Ping every 2000ms
+                pingId = setInterval(() => {
+                    self.postMessage('ping');
+                }, 2000);
+            } else if (e.data === 'stop') {
+                clearInterval(timerId);
+                clearInterval(pingId);
+            }
+        };
+    `;
+
+    const blob = new Blob([workerScript], { type: 'application/javascript' });
+    const worker = new Worker(URL.createObjectURL(blob));
+
+    worker.onmessage = function (e) {
+        if (e.data === 'tick') {
+            checkStatusAndTrigger();
+        } else if (e.data === 'ping') {
+            signalMicMute('ping').catch(() => { });
+        }
+    };
+
     // Initial check
     setTimeout(checkStatusAndTrigger, 2000);
 
-    // Poll every 500ms for status changes
-    setInterval(checkStatusAndTrigger, 500);
+    // Start the worker timer
+    worker.postMessage('start');
 
-    // Send heartbeat ping every 2 seconds to maintain connection
-    setInterval(() => {
-        signalMicMute('ping').catch(() => { });
-    }, 2000);
-
-    // Also watch for DOM mutations
+    // Also watch for DOM mutations (still useful when tab implies active)
     const observer = new MutationObserver(() => {
         checkStatusAndTrigger();
     });
