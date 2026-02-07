@@ -1,7 +1,6 @@
 #include "http_server.h"
 #include "call_recorder.h"
 #include "recorder.h"
-#include <winsock2.h>
 #include <ws2tcpip.h>
 #include <thread>
 #include <atomic>

@@ -1,3 +1,8 @@
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+
+#include "http_server.h"
 #include <windows.h>
 #include <shellapi.h>
 #include <dwmapi.h>
@@ -12,7 +17,6 @@
 #include "ui.h"
 #include "recorder.h"
 #include "call_recorder.h"
-#include "http_server.h"
 #include "ui_controls.h" // New custom controls
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
