@@ -29,16 +29,33 @@ public:
     bool IsPaused() const { return isPaused; }
 
 private:
-    void RecordingLoop();
+    void MicrophoneLoop();    // Captures microphone audio
+    void LoopbackLoop();      // Captures system audio (loopback)
     void WriteWavHeader(std::ofstream& file, int totalDataLen, int sampleRate, int channels, int bitsPerSample);
+    
+    // Mix two buffers into one (stereo: mic=left, loopback=right)
+    std::vector<BYTE> MixBuffers();
 
     std::atomic<bool> isRecording;
     std::atomic<bool> isPaused;
-    std::thread recordingThread;
-
-    std::mutex bufferMutex;
-    std::vector<BYTE> audioBuffer;
     
-    // Audio Format
-    WAVEFORMATEX* pwfx;
+    // Dual capture threads
+    std::thread micThread;
+    std::thread loopbackThread;
+
+    // Separate buffers for each source
+    std::mutex micBufferMutex;
+    std::vector<BYTE> micBuffer;
+    
+    std::mutex loopbackBufferMutex;
+    std::vector<BYTE> loopbackBuffer;
+    
+    // Audio Formats (may differ between devices)
+    WAVEFORMATEX* pwfxMic;
+    WAVEFORMATEX* pwfxLoopback;
+    
+    // Common output format for mixing
+    static const int OUTPUT_SAMPLE_RATE = 48000;
+    static const int OUTPUT_CHANNELS = 2;    // Stereo
+    static const int OUTPUT_BITS = 16;
 };
