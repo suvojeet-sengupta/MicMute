@@ -225,7 +225,7 @@ void CreateRecorderWindow(HINSTANCE hInstance) {
     hRecorderWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
         "MicMuteS_Recorder", "Call Recorder", 
-        WS_POPUP | WS_SYSMENU, // No caption, but keeping sysmenu for transparency?
+        WS_POPUP | WS_SYSMENU | WS_CLIPCHILDREN, // Clip children to prevent button flicker
         x, y, w, h,
         NULL, NULL, hInstance, NULL
     );
