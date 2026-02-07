@@ -1,8 +1,10 @@
 #pragma once
 #include <windows.h>
 #include <shellapi.h>
+#include <string>
 
 // Global Variables
+extern std::string recordingFolder;
 extern NOTIFYICONDATA nid;
 extern HWND hMainWnd;
 extern HWND hOverlayWnd;

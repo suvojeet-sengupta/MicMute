@@ -11,6 +11,8 @@ bool showOverlay = false;
 bool showMeter = false;
 bool showRecorder = false;
 bool showNotifications = true; // Default true
+std::string recordingFolder = "";
+
 
 HFONT hFontTitle;
 HFONT hFontStatus;

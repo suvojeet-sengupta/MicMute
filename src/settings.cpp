@@ -66,6 +66,11 @@ void SaveSettings() {
         RegSetValueEx(hKey, "ShowRecorder", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
         val = showNotifications ? 1 : 0;
         RegSetValueEx(hKey, "ShowNotifications", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+        
+        if (!recordingFolder.empty()) {
+            RegSetValueEx(hKey, "RecordingFolder", 0, REG_SZ, (const BYTE*)recordingFolder.c_str(), (DWORD)(recordingFolder.length() + 1));
+        }
+
         RegCloseKey(hKey);
     }
 }
@@ -83,6 +88,13 @@ void LoadSettings() {
             showRecorder = val != 0;
         if (RegQueryValueEx(hKey, "ShowNotifications", NULL, NULL, (BYTE*)&val, &size) == ERROR_SUCCESS)
             showNotifications = val != 0;
+            
+        char buffer[MAX_PATH] = {0};
+        DWORD bufSize = sizeof(buffer);
+        if (RegQueryValueEx(hKey, "RecordingFolder", NULL, NULL, (BYTE*)buffer, &bufSize) == ERROR_SUCCESS) {
+            recordingFolder = buffer;
+        }
+
         RegCloseKey(hKey);
     }
 }
