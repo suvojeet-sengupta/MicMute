@@ -155,8 +155,12 @@ void CallAutoRecorder::ForceStartRecording() {
     // If already recording, do nothing
     if (currentState == State::RECORDING) return;
     
-    // Start recording immediately
-    if (pRecorder->Start()) {
+    // Create date folder for streaming
+    std::string dateFolder = CreateDateFolder();
+    if (dateFolder.empty()) return;
+    
+    // Start streaming mode for memory safety
+    if (pRecorder->StartStreaming(dateFolder)) {
         recordingStartTick = GetTickCount();
         recordingStartTime = std::time(nullptr);
         lastVoiceTime = recordingStartTick;
@@ -180,10 +184,10 @@ void CallAutoRecorder::ForceStopRecording() {
     DWORD duration = GetTickCount() - recordingStartTick;
     if (duration >= (DWORD)minCallDurationMs) {
         SaveCurrentRecording();
+    } else {
+        // Too short - just cleanup (FinalizeStreaming will still save temp file)
+        pRecorder->FinalizeStreaming("discarded.wav");
     }
-    
-    // Clear buffer for next call
-    pRecorder->Clear();
     
     // Ready for next call (waiting for extension signal)
     TransitionTo(State::DETECTING);
@@ -215,12 +219,14 @@ void CallAutoRecorder::SaveCurrentRecording() {
     if (folder.empty()) return;
     
     std::string filename = GetNextFileName();
-    std::string fullPath = folder + "\\" + filename;
     
     time_t endTime = std::time(nullptr);
     
-    if (pRecorder->SaveToFile(fullPath)) {
-        CreateMetadataFile(fullPath, recordingStartTime, endTime);
+    // Finalize streaming file (updates header and renames)
+    std::string savedPath = pRecorder->FinalizeStreaming(filename);
+    
+    if (!savedPath.empty()) {
+        CreateMetadataFile(savedPath, recordingStartTime, endTime);
         // Notify recorder window about saved file
         NotifyAutoRecordSaved(filename);
     }

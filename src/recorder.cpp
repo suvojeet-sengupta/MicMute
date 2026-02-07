@@ -304,7 +304,11 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                     }
                     
                     if (!recordingFolder.empty()) {
-                         if (recorder.Start()) {
+                         // Get date folder for streaming
+                         std::string dateFolder = GetDateFolderPath();
+                         
+                         // Use STREAMING mode for memory safety
+                         if (recorder.StartStreaming(dateFolder)) {
                              recordingStartTime = std::time(nullptr);
                          } else {
                              MessageBox(hWnd, "Failed to initialize recording.", "Error", MB_ICONERROR);
@@ -318,16 +322,18 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             }
             else if (id == BTN_STOP_SAVE) {
                 if (recorder.IsRecording()) {
-                    // STOP and SAVE
+                    // STOP and SAVE (streaming mode)
                     recorder.Stop();
                     time_t endTime = std::time(nullptr);
                     
                     std::string timestamp = GetCurrentTimestampString();
                     std::string dateFolder = GetDateFolderPath();
                     std::string filename = "Recording_" + timestamp + ".wav";
-                    std::string fullPath = dateFolder + "\\" + filename;
                     
-                    if (recorder.SaveToFile(fullPath)) {
+                    // Finalize streaming file (updates WAV header and renames)
+                    std::string savedPath = recorder.FinalizeStreaming(filename);
+                    
+                    if (!savedPath.empty()) {
                         // Create Metadata TXT
                         std::string txtPath = dateFolder + "\\" + "Recording_" + timestamp + ".txt";
                         std::ofstream txtFile(txtPath);
@@ -343,6 +349,7 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                             txtFile << "End Time: " << std::put_time(&tmEnd, "%Y-%m-%d %H:%M:%S") << "\n";
                             double duration = difftime(endTime, recordingStartTime);
                             txtFile << "Duration: " << duration << " seconds\n";
+                            txtFile << "Mode: Streaming (crash-safe)\n";
                             txtFile.close();
                         }
                         
