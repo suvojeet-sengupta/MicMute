@@ -1,6 +1,7 @@
 #include "recorder.h"
 #include "WasapiRecorder.h"
 #include "call_recorder.h"
+#include "http_server.h"
 #include "globals.h"
 #include "settings.h"
 #include <commdlg.h>
@@ -415,10 +416,16 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                     SetTextColor(hMemDC, RGB(255, 60, 60)); // Red
                     DrawText(hMemDC, "Recording...", -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
                 }
-            } else if (g_CallRecorder && g_CallRecorder->IsEnabled()) {
-                // Auto-record enabled but detecting (waiting for voice)
-                SetTextColor(hMemDC, RGB(100, 180, 255)); // Blue
-                DrawText(hMemDC, "Auto: Listening...", -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+            }
+            else if (g_CallRecorder && g_CallRecorder->IsEnabled()) {
+                // Auto-record enabled - Check extension connection status
+                if (IsExtensionConnected()) {
+                    SetTextColor(hMemDC, RGB(100, 180, 255)); // Blue
+                    DrawText(hMemDC, "Auto: Ready", -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                } else {
+                    SetTextColor(hMemDC, RGB(255, 165, 0)); // Orange/Yellow
+                    DrawText(hMemDC, "Auto: Waiting for Extension...", -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                }
             } else {
                 SetTextColor(hMemDC, RGB(200, 200, 200));
                 DrawText(hMemDC, "Ready", -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
