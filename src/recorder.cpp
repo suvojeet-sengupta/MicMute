@@ -356,18 +356,26 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             break;
         }
         
+        case WM_ERASEBKGND:
+            return 1; // Prevent background erasure to reduce flickering
+
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hWnd, &ps);
             RECT rect; GetClientRect(hWnd, &rect);
             
+            // Double Buffering
+            HDC hMemDC = CreateCompatibleDC(hdc);
+            HBITMAP hMemBitmap = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
+            HBITMAP hOldBitmap = (HBITMAP)SelectObject(hMemDC, hMemBitmap);
+            
             // Draw Background (Mica-like dark gray)
-            FillRect(hdc, &rect, hBrushBg); // Uses global bg color
+            FillRect(hMemDC, &rect, hBrushBg); // Uses global bg color
             
             // Draw Text
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, colorText);
-            SelectObject(hdc, hFontNormal);
+            SetBkMode(hMemDC, TRANSPARENT);
+            SetTextColor(hMemDC, colorText);
+            SelectObject(hMemDC, hFontNormal);
             
             RECT textRect = rect;
             textRect.left += 20; // Margin
@@ -380,9 +388,9 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             
             if (showingSavedNotify) {
                 // Show "Saved: filename" with green color
-                SetTextColor(hdc, RGB(100, 255, 100)); // Green
+                SetTextColor(hMemDC, RGB(100, 255, 100)); // Green
                 std::string msg = "Saved: " + lastSavedFileName;
-                DrawText(hdc, msg.c_str(), -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                DrawText(hMemDC, msg.c_str(), -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
             }
             else if (g_CallRecorder && g_CallRecorder->IsEnabled() && 
                      g_CallRecorder->GetState() == CallAutoRecorder::State::RECORDING) {
@@ -391,30 +399,38 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                 
                 // Pulsing red color for recording indicator
                 int pulse = 180 + (animationFrame * 25); // Varies from 180 to 230
-                SetTextColor(hdc, RGB(pulse, 60, 60));
+                SetTextColor(hMemDC, RGB(pulse, 60, 60));
                 
                 // Draw pulsing dot indicator
                 const char* dots[] = {"●  ", " ● ", "  ●"};
                 std::string msg = std::string(dots[animationFrame]) + " Auto Recording...";
-                DrawText(hdc, msg.c_str(), -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                DrawText(hMemDC, msg.c_str(), -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
             }
             else if (recorder.IsRecording()) {
                 // Manual recording
                 if (recorder.IsPaused()) {
-                    SetTextColor(hdc, RGB(255, 200, 0)); // Yellow
-                    DrawText(hdc, "Recording Paused", -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                    SetTextColor(hMemDC, RGB(255, 200, 0)); // Yellow
+                    DrawText(hMemDC, "Recording Paused", -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
                 } else {
-                    SetTextColor(hdc, RGB(255, 60, 60)); // Red
-                    DrawText(hdc, "Recording...", -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                    SetTextColor(hMemDC, RGB(255, 60, 60)); // Red
+                    DrawText(hMemDC, "Recording...", -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
                 }
             } else if (g_CallRecorder && g_CallRecorder->IsEnabled()) {
                 // Auto-record enabled but detecting (waiting for voice)
-                SetTextColor(hdc, RGB(100, 180, 255)); // Blue
-                DrawText(hdc, "Auto: Listening...", -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                SetTextColor(hMemDC, RGB(100, 180, 255)); // Blue
+                DrawText(hMemDC, "Auto: Listening...", -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
             } else {
-                SetTextColor(hdc, RGB(200, 200, 200));
-                DrawText(hdc, "Ready", -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                SetTextColor(hMemDC, RGB(200, 200, 200));
+                DrawText(hMemDC, "Ready", -1, &textRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
             }
+            
+            // Copy from memory DC to screen DC
+            BitBlt(hdc, 0, 0, rect.right, rect.bottom, hMemDC, 0, 0, SRCCOPY);
+            
+            // Cleanup
+            SelectObject(hMemDC, hOldBitmap);
+            DeleteObject(hMemBitmap);
+            DeleteDC(hMemDC);
             
             EndPaint(hWnd, &ps);
             return 0;
