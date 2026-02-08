@@ -33,6 +33,11 @@
             return 'ready';
         }
 
+        // Check for "Break" indicator (agent on break -> not in call)
+        if (pageText.match(/Break/i)) {
+            return 'ready';
+        }
+
         // Fallback: look for IncomingCall or call details
         if (pageText.includes('IncomingCall') || pageText.includes('Call Details:')) {
             return 'busy';

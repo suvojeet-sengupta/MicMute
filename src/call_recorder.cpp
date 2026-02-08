@@ -1,6 +1,7 @@
 #include "call_recorder.h"
 #include "WasapiRecorder.h"
 #include "recorder.h"
+#include "http_server.h"
 #include "globals.h"
 #include "audio.h"
 #include <shlobj.h>
@@ -109,6 +110,11 @@ void CallAutoRecorder::Poll() {
     if (today != currentDate) {
         currentDate = today;
         todayCallCount = 0;
+    }
+
+    // Safety: If extension disconnects (tab closed) while recording, save immediately
+    if (currentState == State::RECORDING && !IsExtensionConnected()) {
+        ForceStopRecording();
     }
     
     // No VAD - recording is controlled by HTTP server (extension signals)

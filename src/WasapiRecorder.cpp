@@ -585,7 +585,7 @@ void WasapiRecorder::MixAndWriteChunk() {
     // Get sample rates
     int micSampleRate = pwfxMic->nSamplesPerSec;
     int loopSampleRate = pwfxLoopback->nSamplesPerSec;
-    int outputSampleRate = loopSampleRate;
+    int outputSampleRate = OUTPUT_SAMPLE_RATE; // Use fixed output rate to match writer
     
     // Calculate frame counts
     size_t micFrames = micCopy.size() / pwfxMic->nBlockAlign;
