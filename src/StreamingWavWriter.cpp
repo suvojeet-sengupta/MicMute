@@ -33,7 +33,9 @@ bool StreamingWavWriter::Start(const std::string& outputFolder, int sampleRate, 
     m_bitsPerSample = bitsPerSample;
     m_blockAlign = channels * bitsPerSample / 8;
     m_byteRate = sampleRate * m_blockAlign;
+    m_byteRate = sampleRate * m_blockAlign;
     m_totalBytesWritten = 0;
+    m_lastFlushTime = GetTickCount();
 
     // Generate temp filename with timestamp
     auto t = std::time(nullptr);
@@ -117,13 +119,9 @@ void StreamingWavWriter::WriteChunk(const void* data, size_t bytes) {
         return;
     }
     
-    // Flush periodically to ensure data is on disk
-    // (helps with crash recovery)
-    m_file.flush();
-    if (m_file.fail()) {
-        m_failed = true;
-        OutputDebugStringA("[StreamingWavWriter] Flush failed!\n");
-    }
+    // Flush periodically to ensure data is on disk and header is updated
+    // (helps with crash recovery - file will be playable even if app crashes)
+    PeriodicFlush();
 }
 
 void StreamingWavWriter::UpdateWavHeader() {
@@ -203,4 +201,29 @@ void StreamingWavWriter::Abort() {
 double StreamingWavWriter::GetDurationSeconds() const {
     if (m_byteRate == 0) return 0.0;
     return static_cast<double>(m_totalBytesWritten) / m_byteRate;
+}
+
+void StreamingWavWriter::PeriodicFlush() {
+    // Check if it's time to flush (every 5 seconds)
+    DWORD now = GetTickCount();
+    if (now - m_lastFlushTime < 5000) return;
+
+    m_lastFlushTime = now;
+
+    // Save current position
+    std::streampos currentPos = m_file.tellp();
+
+    // Update header with current size
+    UpdateWavHeader();
+
+    // Restore position (UpdateWavHeader seeks around)
+    m_file.seekp(currentPos);
+
+    // Force flush to disk
+    m_file.flush();
+    
+    if (m_file.fail()) {
+        m_failed = true;
+        OutputDebugStringA("[StreamingWavWriter] Flush failed!\n");
+    }
 }

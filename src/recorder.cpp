@@ -480,7 +480,7 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                 recorder.Stop(); // Calls join() internally
                 
                 // Show Error
-                MessageBox(hWnd, "Recording stopped automatically because the output folder was deleted or is inaccessible.", "Recording Error", MB_ICONERROR | MB_OK);
+                MessageBox(hWnd, "Recording stopped automatically due to a device disconnect or storage error.", "Recording Error", MB_ICONERROR | MB_OK);
                 
                 // Update UI state
                 UpdateRecorderUI(hWnd);

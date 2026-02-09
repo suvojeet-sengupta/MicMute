@@ -35,6 +35,18 @@ WasapiRecorder::~WasapiRecorder() {
     if (pwfxMic) CoTaskMemFree(pwfxMic);
     if (pwfxLoopback) CoTaskMemFree(pwfxLoopback);
     if (m_pWriter) {
+        // Ensure writer is finalized or aborted if not already
+        if (m_pWriter->IsActive()) {
+             m_pWriter->Abort(); // Determine if we should finalize instead?
+             // If we rely on Stop() being called before destruct, this is a fallback.
+             // Best to abort to avoid partial files masquerading as good ones?
+             // Or maybe we want to save what we have?
+             // Safe bet: Stop() should be called explicitly.
+             // If we are here, something went wrong, let's Abort to cleantemp.
+             // but if it was valid data... 
+             // Let's rely on Stop() being called.
+             // But let's make sure we delete it.
+        }
         delete m_pWriter;
         m_pWriter = nullptr;
     }
@@ -112,13 +124,13 @@ void WasapiRecorder::Stop() {
     m_mixerCV.notify_all();
     
     if (micThread.joinable()) {
-        micThread.join();
+        try { micThread.join(); } catch(...) {}
     }
     if (loopbackThread.joinable()) {
-        loopbackThread.join();
+        try { loopbackThread.join(); } catch(...) {}
     }
     if (mixerThread.joinable()) {
-        mixerThread.join();
+         try { mixerThread.join(); } catch(...) {}
     }
     
     m_streamingMode = false;
@@ -234,6 +246,19 @@ void WasapiRecorder::MicrophoneLoop() {
     pAudioClient->Stop();
 
 Exit:
+    if (FAILED(hr) && isRecording) {
+        if (hr == AUDCLNT_E_DEVICE_INVALIDATED || hr == AUDCLNT_E_RESOURCES_INVALIDATED) {
+             OutputDebugStringA("[WasapiRecorder] Mic Disconnected/Invalidated!\n");
+        } else {
+             char errBuf[64];
+             snprintf(errBuf, sizeof(errBuf), "[WasapiRecorder] Mic Error: 0x%08X\n", hr);
+             OutputDebugStringA(errBuf);
+        }
+        
+        if (hRecorderWnd) {
+            PostMessage(hRecorderWnd, WM_APP_RECORDING_ERROR, 0, 0);
+        }
+    }
     SafeRelease(&pCaptureClient);
     SafeRelease(&pAudioClient);
     SafeRelease(&pDevice);
@@ -332,6 +357,19 @@ void WasapiRecorder::LoopbackLoop() {
     pAudioClient->Stop();
 
 Exit:
+    if (FAILED(hr) && isRecording) {
+         if (hr == AUDCLNT_E_DEVICE_INVALIDATED || hr == AUDCLNT_E_RESOURCES_INVALIDATED) {
+             OutputDebugStringA("[WasapiRecorder] Loopback Disconnected/Invalidated!\n");
+        } else {
+             char errBuf[64];
+             snprintf(errBuf, sizeof(errBuf), "[WasapiRecorder] Loopback Error: 0x%08X\n", hr);
+             OutputDebugStringA(errBuf);
+        }
+
+        if (hRecorderWnd) {
+            PostMessage(hRecorderWnd, WM_APP_RECORDING_ERROR, 0, 0);
+        }
+    }
     SafeRelease(&pCaptureClient);
     SafeRelease(&pAudioClient);
     SafeRelease(&pDevice);

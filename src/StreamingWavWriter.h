@@ -61,6 +61,9 @@ private:
     std::atomic<bool> m_failed;
     std::atomic<size_t> m_totalBytesWritten;
 
+    std::atomic<DWORD> m_lastFlushTime;
+    void PeriodicFlush();
+
     // Audio format
     int m_sampleRate;
     int m_channels;
