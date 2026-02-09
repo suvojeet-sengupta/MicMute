@@ -48,15 +48,36 @@ void SaveRecorderPosition() {
 }
 
 void LoadRecorderPosition(int* x, int* y, int* w, int* h) {
-    *x = 200; *y = 200;
     *w = 420; *h = 60; // Default Horizontal Toolbar Size
+    
+    // Default to center of primary monitor
+    int screenW = GetSystemMetrics(SM_CXSCREEN);
+    int screenH = GetSystemMetrics(SM_CYSCREEN);
+    *x = (screenW - *w) / 2;
+    *y = screenH - *h - 100; // Near bottom, 100px from edge
     
     HKEY hKey;
     if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD);
-        RegQueryValueEx(hKey, "RecorderX", nullptr, nullptr, (BYTE*)x, &size);
-        RegQueryValueEx(hKey, "RecorderY", nullptr, nullptr, (BYTE*)y, &size);
+        int savedX = *x, savedY = *y;
+        RegQueryValueEx(hKey, "RecorderX", nullptr, nullptr, (BYTE*)&savedX, &size);
+        RegQueryValueEx(hKey, "RecorderY", nullptr, nullptr, (BYTE*)&savedY, &size);
         RegCloseKey(hKey);
+        
+        // Validate saved position is on-screen
+        // Use virtual screen metrics for multi-monitor support
+        int virtLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        int virtTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        int virtRight = virtLeft + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int virtBottom = virtTop + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        
+        // Check if at least part of window is visible
+        if (savedX >= virtLeft && savedX < virtRight - 50 &&
+            savedY >= virtTop && savedY < virtBottom - 50) {
+            *x = savedX;
+            *y = savedY;
+        }
+        // Otherwise keep the default centered position
     }
 }
 
