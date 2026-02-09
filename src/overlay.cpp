@@ -47,8 +47,8 @@ void CreateMeterWindow(HINSTANCE hInstance) {
     LoadMeterPosition(&meterX, &meterY, &meterW, &meterH);
     
     // Explicitly zero-out history to prevent visual glitches on startup
-    memset(levelHistory, 0, sizeof(levelHistory));
-    memset(speakerLevelHistory, 0, sizeof(speakerLevelHistory));
+    levelHistory.fill(0.0f);
+    speakerLevelHistory.fill(0.0f);
     levelHistoryIndex = 0;
     
     // Scale factor
@@ -387,8 +387,8 @@ LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             DrawText(hdcMem, "Audio Output (CX)", -1, &labelCX, DT_LEFT | DT_TOP | DT_SINGLELINE);
 
             // Draw Waveforms
-            DrawWaveform(hdcMem, rectAdvisor, levelHistory, levelHistoryIndex, IsDefaultMicMuted(), RGB(0, 255, 0), RGB(255, 255, 0));
-            DrawWaveform(hdcMem, rectCX, speakerLevelHistory, levelHistoryIndex, false, RGB(0, 200, 255), RGB(0, 100, 255));
+            DrawWaveform(hdcMem, rectAdvisor, levelHistory.data(), levelHistoryIndex, IsDefaultMicMuted(), RGB(0, 255, 0), RGB(255, 255, 0));
+            DrawWaveform(hdcMem, rectCX, speakerLevelHistory.data(), levelHistoryIndex, false, RGB(0, 200, 255), RGB(0, 100, 255));
             
             // Divider Line
             HPEN divPen = CreatePen(PS_SOLID, 1, RGB(50, 50, 60));

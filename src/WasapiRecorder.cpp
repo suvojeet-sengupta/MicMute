@@ -152,6 +152,11 @@ void WasapiRecorder::MicrophoneLoop() {
 
     CoInitialize(nullptr);
 
+    UINT32 packetLength = 0;
+    UINT32 numFramesAvailable = 0;
+    BYTE *pData = nullptr;
+    DWORD flags = 0;
+
     // Get Default Capture Device (Microphone)
     hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, 
                           __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
@@ -195,11 +200,6 @@ void WasapiRecorder::MicrophoneLoop() {
     // Start
     hr = pAudioClient->Start();
     if (FAILED(hr)) goto Exit;
-
-    UINT32 packetLength = 0;
-    UINT32 numFramesAvailable;
-    BYTE *pData;
-    DWORD flags;
 
     while (isRecording) {
         if (isPaused) {
@@ -250,6 +250,11 @@ void WasapiRecorder::LoopbackLoop() {
 
     CoInitialize(nullptr);
 
+    UINT32 packetLength = 0;
+    UINT32 numFramesAvailable = 0;
+    BYTE *pData = nullptr;
+    DWORD flags = 0;
+
     // Get Default RENDER Device (Speaker/Output) for loopback
     hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, 
                           __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
@@ -293,11 +298,6 @@ void WasapiRecorder::LoopbackLoop() {
     // Start
     hr = pAudioClient->Start();
     if (FAILED(hr)) goto Exit;
-
-    UINT32 packetLength = 0;
-    UINT32 numFramesAvailable;
-    BYTE *pData;
-    DWORD flags;
 
     while (isRecording) {
         if (isPaused) {
