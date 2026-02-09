@@ -1,5 +1,6 @@
 #include "WasapiRecorder.h"
 #include "StreamingWavWriter.h"
+#include "recorder.h" // For hRecorderWnd and WM_APP_RECORDING_ERROR
 #include <fstream>
 #include <iostream>
 #include <mmreg.h>
@@ -652,6 +653,19 @@ void WasapiRecorder::MixAndWriteChunk() {
     // Write to disk
     m_pWriter->WriteChunk(output.data(), output.size());
     
+    // Check for failure (e.g. folder deleted)
+    if (m_pWriter->HasFailed()) {
+        OutputDebugStringA("[WasapiRecorder] Writer failed! Stopping recording...\n");
+        // Post message to UI thread to stop recording safely
+        if (hRecorderWnd) {
+            PostMessage(hRecorderWnd, WM_APP_RECORDING_ERROR, 0, 0);
+        }
+        // Also signal stop internally to break loops?
+        // No, let UI allow Stop() to handle it properly.
+        // But we should stop writing immediately.
+        return;
+    }
+
     char debug[128];
     snprintf(debug, sizeof(debug), "[WasapiRecorder] Wrote %.2f sec chunk to disk\n", maxDuration);
     OutputDebugStringA(debug);

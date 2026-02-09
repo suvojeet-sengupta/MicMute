@@ -453,6 +453,19 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             return 0;
         }
         
+        case WM_APP_RECORDING_ERROR:
+            // Stop recording safely on UI thread
+            if (recorder.IsRecording()) {
+                recorder.Stop(); // Calls join() internally
+                
+                // Show Error
+                MessageBox(hWnd, "Recording stopped automatically because the output folder was deleted or is inaccessible.", "Recording Error", MB_ICONERROR | MB_OK);
+                
+                // Update UI state
+                UpdateRecorderUI(hWnd);
+            }
+            return 0;
+
         case WM_CLOSE:
             // Prevent closing via Alt+F4 if we want "always open" logic?
             // User requested "always open rhega if ... enabled".

@@ -6,6 +6,7 @@
 
 StreamingWavWriter::StreamingWavWriter()
     : m_isActive(false)
+    , m_failed(false)
     , m_totalBytesWritten(0)
     , m_sampleRate(48000)
     , m_channels(2)
@@ -109,9 +110,20 @@ void StreamingWavWriter::WriteChunk(const void* data, size_t bytes) {
     m_file.write(static_cast<const char*>(data), bytes);
     m_totalBytesWritten += bytes;
 
+    // Check for write failures
+    if (m_file.fail()) {
+        m_failed = true;
+        OutputDebugStringA("[StreamingWavWriter] Write failed! Disk full or disconnected?\n");
+        return;
+    }
+    
     // Flush periodically to ensure data is on disk
     // (helps with crash recovery)
     m_file.flush();
+    if (m_file.fail()) {
+        m_failed = true;
+        OutputDebugStringA("[StreamingWavWriter] Flush failed!\n");
+    }
 }
 
 void StreamingWavWriter::UpdateWavHeader() {

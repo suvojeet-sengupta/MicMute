@@ -340,7 +340,7 @@ LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
         case WM_EXITSIZEMOVE:
             SaveMeterPosition();
-            break;
+            return 0;
 
         case WM_PAINT: {
             PAINTSTRUCT ps;

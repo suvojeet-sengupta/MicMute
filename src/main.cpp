@@ -208,13 +208,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     LoadSettings();
 
-    if (!IsStartupEnabled()) {
-         // Simple first run logic could go here, omitting for brevity in this refactor
-         if (MessageBox(hMainWnd, "Enable Startup with Windows?", "MicMute-S", MB_YESNO | MB_ICONQUESTION) == IDYES) {
-            ManageStartup(true);
-            isRunOnStartup = true;
-         }
-         SaveSettings();
+    if (isRunOnStartup) {
+        // Robustness: Re-apply startup registry key on every launch to fix broken paths/missing keys
+        ManageStartup(true);
+    } else {
+        // First run logic
+        if (MessageBox(hMainWnd, "Enable Startup with Windows?", "MicMute-S", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+             ManageStartup(true);
+             isRunOnStartup = true;
+             SaveSettings();
+        }
     }
 
     if (showOverlay) CreateOverlayWindow(hInstance);
@@ -780,7 +783,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             return DefWindowProc(hWnd, msg, wParam, lParam);
 
+        case WM_QUERYENDSESSION:
+            return TRUE; // We agree to shut down
+
+        case WM_ENDSESSION:
+            if (wParam == TRUE) {
+                // Windows is shutting down, save everything
+                SaveSettings();
+                // Individual window positions should be saved too
+                if (hRecorderWnd) SaveRecorderPosition(); // Add to recorder.h/cpp if needed
+                // Helper to save all - implemented in settings.cpp now calls SaveOverlay/Meter
+                // But we need to make sure recorder pos is saved.
+            }
+            return 0;
+
         case WM_DESTROY:
+            // Save state before exit
+            SaveSettings();
+            if (hRecorderWnd) SaveRecorderPosition();
+            
             RemoveTrayIcon();
             PostQuitMessage(0);
             break;

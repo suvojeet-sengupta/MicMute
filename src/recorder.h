@@ -24,3 +24,9 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 // Auto-record notification
 void NotifyAutoRecordSaved(const std::string& filename);
 
+// Error Notification
+#define WM_APP_RECORDING_ERROR (WM_APP + 5)
+
+// State Saving
+void SaveRecorderPosition();
+

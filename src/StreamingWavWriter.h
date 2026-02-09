@@ -43,7 +43,10 @@ public:
     // Get total bytes written so far
     size_t GetBytesWritten() const { return m_totalBytesWritten; }
 
-    // Get recording duration in seconds
+    // Check if writer has failed (e.g. disk full, disconnected)
+    bool HasFailed() const { return m_failed; }
+
+    // Get current recording duration in seconds
     double GetDurationSeconds() const;
 
 private:
@@ -55,6 +58,7 @@ private:
     std::string m_outputFolder;
     std::mutex m_writeMutex;
     std::atomic<bool> m_isActive;
+    std::atomic<bool> m_failed;
     std::atomic<size_t> m_totalBytesWritten;
 
     // Audio format

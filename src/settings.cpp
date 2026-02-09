@@ -73,6 +73,13 @@ void SaveSettings() {
             RegSetValueEx(hKey, "RecordingFolder", 0, REG_SZ, (const BYTE*)recordingFolder.c_str(), (DWORD)(recordingFolder.length() + 1));
         }
 
+        // Save Window Positions on global save
+        SaveOverlayPosition();
+        SaveMeterPosition();
+        // Recorder position is handled in recorder.cpp, but we should ensure it's called
+        // We need a forward declaration or include, but for now relying on individual window saves is okay IF they are called.
+        // Better: Call them here if windows are valid, OR rely on WM_DESTROY/WM_ENDSESSION in main.cpp to call individual save functions.
+        
         RegCloseKey(hKey);
     }
 }
@@ -106,10 +113,13 @@ void LoadSettings() {
 void ManageStartup(bool enable) {
     HKEY hKey;
     const char* path = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-    if (RegOpenKey(HKEY_CURRENT_USER, path, &hKey) == ERROR_SUCCESS) {
+    long result = RegOpenKeyEx(HKEY_CURRENT_USER, path, 0, KEY_SET_VALUE, &hKey);
+    
+    if (result == ERROR_SUCCESS) {
         if (enable) {
             char exe[MAX_PATH];
             GetModuleFileName(nullptr, exe, MAX_PATH);
+            // Robustness: Always update the path in case EXE moved
             RegSetValueEx(hKey, "MicMute-S", 0, REG_SZ, (BYTE*)exe, (DWORD)(strlen(exe) + 1));
         } else {
             RegDeleteValue(hKey, "MicMute-S");
