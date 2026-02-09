@@ -359,7 +359,39 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             // Draw Sidebar Items
             for (int i = 0; i < TAB_COUNT; i++) {
-                DrawSidebarItem(hdc, i, tabNames[i], currentTab, hoverTab);
+                // Determine State
+                bool isSelected = (i == currentTab);
+                bool isHovered = (i == hoverTab);
+                
+                RECT rcItem = {0, 100 + (i * SIDEBAR_ITEM_HEIGHT), SIDEBAR_WIDTH, 100 + ((i + 1) * SIDEBAR_ITEM_HEIGHT)};
+                
+                // Selection / Hover Background
+                if (isSelected) {
+                    // Modern left pill indicator
+                    RECT rcIndicator = {2, rcItem.top + 10, 6, rcItem.bottom - 10};
+                    HBRUSH hAccent = CreateSolidBrush(colorSidebarSelected);
+                    FillRect(hdc, &rcIndicator, hAccent);
+                    DeleteObject(hAccent);
+                    
+                    // Subtle background for selected item
+                    HBRUSH hSelectedBg = CreateSolidBrush(RGB(45, 45, 45));
+                    FillRect(hdc, &rcItem, hSelectedBg);
+                    DeleteObject(hSelectedBg);
+                } else if (isHovered) {
+                    FillRect(hdc, &rcItem, hBrushSidebarHover);
+                }
+                
+                // Icon Placement (Placeholder for actual icons)
+                // DrawIconEx(hdc, 20, rcItem.top + 12, ...);
+
+                // Text
+                SetBkMode(hdc, TRANSPARENT);
+                SetTextColor(hdc, isSelected ? colorText : (isHovered ? colorText : colorTextDim));
+                SelectObject(hdc, isSelected ? hFontNormal : hFontSmall);
+                
+                RECT rcText = rcItem;
+                rcText.left += 50; // Gap for icon
+                DrawText(hdc, tabNames[i], -1, &rcText, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
             }
 
             // Draw Status Text (Directly on Main Window)

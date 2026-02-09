@@ -95,6 +95,22 @@ std::string BrowseFolder(HWND owner) {
     return "";
 }
 
+// Ensure a recording folder is selected. Returns true if valid, false if cancelled.
+bool EnsureRecordingFolderSelected(HWND parent) {
+    if (!recordingFolder.empty()) return true;
+
+    int ret = MessageBox(parent, "Please select a folder to save recordings.", "Setup Required", MB_OKCANCEL | MB_ICONINFORMATION);
+    if (ret == IDOK) {
+        std::string newPath = BrowseFolder(parent);
+        if (!newPath.empty()) {
+            recordingFolder = newPath;
+            SaveSettings();
+            return true;
+        }
+    }
+    return false;
+}
+
 // Helpers for file naming
 std::string GetCurrentTimestampString() {
     auto t = std::time(nullptr);
@@ -287,32 +303,19 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             }
             else if (id == BTN_START_PAUSE) {
                 if (!recorder.IsRecording()) {
-                    // Check Folder
-                    if (recordingFolder.empty()) {
-                         int ret = MessageBox(hWnd, "Please select a folder to save recordings.", "First Time Setup", MB_OKCANCEL);
-                         if (ret == IDOK) {
-                             std::string newPath = BrowseFolder(hWnd);
-                             if (!newPath.empty()) {
-                                 recordingFolder = newPath;
-                                 SaveSettings();
-                             } else {
-                                 return 0; // Cancelled
-                             }
-                         } else {
-                             return 0; // Cancelled
-                         }
+                    // Enforce Folder Selection
+                    if (!EnsureRecordingFolderSelected(hWnd)) {
+                        return 0; // Cancelled
                     }
                     
-                    if (!recordingFolder.empty()) {
-                         // Get date folder for streaming
-                         std::string dateFolder = GetDateFolderPath();
-                         
-                         // Use STREAMING mode for memory safety
-                         if (recorder.StartStreaming(dateFolder)) {
-                             recordingStartTime = std::time(nullptr);
-                         } else {
-                             MessageBox(hWnd, "Failed to initialize recording.", "Error", MB_ICONERROR);
-                         }
+                    // Get date folder for streaming
+                    std::string dateFolder = GetDateFolderPath();
+                    
+                    // Use STREAMING mode for memory safety
+                    if (recorder.StartStreaming(dateFolder)) {
+                        recordingStartTime = std::time(nullptr);
+                    } else {
+                        MessageBox(hWnd, "Failed to initialize recording.", "Error", MB_ICONERROR);
                     }
                 } else {
                     if (recorder.IsPaused()) recorder.Resume();

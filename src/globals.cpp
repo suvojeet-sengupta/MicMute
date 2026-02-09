@@ -37,25 +37,25 @@ int levelHistoryIndex = 0;
 // Color Definitions
 // Modern Dark Theme
 // Modern Dark Theme (Windows 11 Style)
-COLORREF colorBg = RGB(32, 32, 32);         // Mica Fallback
-COLORREF colorSidebarBg = RGB(32, 32, 32);  // Transparent/Mica
-COLORREF colorText = RGB(255, 255, 255);    // Primary Text
+COLORREF colorBg = RGB(32, 32, 32);         // Fallback if Mica fails
+COLORREF colorSidebarBg = RGB(32, 32, 32);  // Transparent/Mica (Handled by DWM, this is fallback)
+COLORREF colorText = RGB(240, 240, 240);    // Primary Text (Off-white)
 COLORREF colorTextDim = RGB(160, 160, 160); // Secondary Text
-COLORREF colorMuted = RGB(255, 69, 58);     // System Red
-COLORREF colorLive = RGB(48, 209, 88);      // System Green
-COLORREF colorOverlayBgMuted = RGB(50, 0, 0); // Darker Red for Overlay
-COLORREF colorOverlayBgLive = RGB(0, 50, 0);  // Darker Green for Overlay
-COLORREF colorMeterBg = RGB(20, 20, 20);
-COLORREF colorChroma = RGB(255, 0, 255);    // Magenta
+COLORREF colorMuted = RGB(255, 69, 58);     // System Red (Windows 11)
+COLORREF colorLive = RGB(50, 215, 75);      // System Green (Windows 11)
+COLORREF colorOverlayBgMuted = RGB(30, 0, 0); // Subtle Dark Red
+COLORREF colorOverlayBgLive = RGB(0, 30, 0);  // Subtle Dark Green
+COLORREF colorMeterBg = RGB(20, 20, 20);    // Dark for Meter
+COLORREF colorChroma = RGB(255, 0, 255);    // Magenta key
 
 // Toggle Switch & Controls
 COLORREF colorToggleBgOff = RGB(60, 60, 60);
-COLORREF colorToggleBgOn = RGB(96, 205, 255); // System Accent (Blue)
-COLORREF colorToggleCircle = RGB(255, 255, 255); // Thumb
+COLORREF colorToggleBgOn = RGB(0, 120, 215);  // Windows Acccent Blue
+COLORREF colorToggleCircle = RGB(255, 255, 255);
 
 // Sidebar Interaction
-COLORREF colorSidebarHover = RGB(55, 55, 55);    // Subtle highlight
-COLORREF colorSidebarSelected = RGB(70, 70, 70); // Stronger highlight
+COLORREF colorSidebarHover = RGB(50, 50, 50);    // Subtle highlight
+COLORREF colorSidebarSelected = RGB(0, 120, 215); // Accent highlight
 
 HBRUSH hBrushBg;
 HBRUSH hBrushSidebarBg;

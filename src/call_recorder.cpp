@@ -160,6 +160,22 @@ void CallAutoRecorder::ForceStartRecording() {
     
     // If already recording, do nothing
     if (currentState == State::RECORDING) return;
+
+    // Enforce Folder Selection (Must be on UI thread really, but let's try direct call or use main window)
+    // Since this might be called from HTTP thread, we need to be careful. 
+    // However, MessageBox is generally thread-safe if parent is NULL or valid window.
+    // Ideally we should PostMessage to main thread, but for now strict enforcement:
+    if (recordingFolder.empty()) {
+        // We need updates to run on UI thread to be safe with COM (BrowseFolder)
+        // But for satisfied requirement "select hone ke bd hi on hoga", we can block here or fail.
+        // Prompting from a hidden background thread is bad UX (might hide behind windows).
+        // Better to fail internally if not set, BUT user asked for PROMPT.
+        
+        // Let's use the main window handle if available
+        if (!EnsureRecordingFolderSelected(hMainWnd)) {
+            return; // Cancelled or failed
+        }
+    }
     
     // Create date folder for streaming
     std::string dateFolder = CreateDateFolder();

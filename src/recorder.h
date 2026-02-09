@@ -14,7 +14,9 @@ extern HWND hRecorderWnd;
 void CreateRecorderWindow(HINSTANCE hInstance);
 void ShowRecorderWindow(bool show);
 void InitRecorder();
+void InitRecorder();
 void CleanupRecorder();
+bool EnsureRecordingFolderSelected(HWND parent);
 
 // Window Procedure
 LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
