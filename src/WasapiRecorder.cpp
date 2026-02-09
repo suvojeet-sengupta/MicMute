@@ -465,12 +465,9 @@ std::vector<BYTE> WasapiRecorder::MixBuffers() {
             loopSample = InterpolateSample(loopbackBuffer, loopPos, pwfxLoopback, loopIsFloat);
         }
         
-        // Mix both sources
-        float mixed = (micSample + loopSample) * 0.5f;
-        short outSample = FloatToShort(mixed);
-        
-        outPtr[i * 2] = outSample;      // Left
-        outPtr[i * 2 + 1] = outSample;  // Right
+        // Stereo output: Mic (Advisor) = Left, Loopback (CX) = Right
+        outPtr[i * 2] = FloatToShort(micSample);      // Left = Advisor
+        outPtr[i * 2 + 1] = FloatToShort(loopSample); // Right = CX
     }
     
     return output;
@@ -639,15 +636,15 @@ void WasapiRecorder::MixAndWriteChunk() {
             loopSample = getSample(loopCopy, loopFrame, pwfxLoopback, loopIsFloat);
         }
         
-        // Mix
-        float mixed = (micSample + loopSample) * 0.5f;
-        mixed = mixed * 32767.0f;
-        if (mixed > 32767.0f) mixed = 32767.0f;
-        if (mixed < -32768.0f) mixed = -32768.0f;
-        short outSample = (short)mixed;
-        
-        outPtr[i * 2] = outSample;      // Left
-        outPtr[i * 2 + 1] = outSample;  // Right
+        // Stereo output: Mic (Advisor) = Left, Loopback (CX) = Right
+        auto toShort = [](float s) -> short {
+            s = s * 32767.0f;
+            if (s > 32767.0f) s = 32767.0f;
+            if (s < -32768.0f) s = -32768.0f;
+            return (short)s;
+        };
+        outPtr[i * 2] = toShort(micSample);      // Left = Advisor
+        outPtr[i * 2 + 1] = toShort(loopSample); // Right = CX
     }
     
     // Write to disk
