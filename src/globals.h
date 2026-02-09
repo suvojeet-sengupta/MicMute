@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <string>
+#include <array>
 
 // Global Variables
 extern std::string recordingFolder;
@@ -39,9 +40,9 @@ extern HICON hIconMicOff;
 extern int overlayOpacity;
 
 // Level history for waveform
-#define LEVEL_HISTORY_SIZE 60
-extern float levelHistory[LEVEL_HISTORY_SIZE];
-extern float speakerLevelHistory[LEVEL_HISTORY_SIZE];
+constexpr size_t LEVEL_HISTORY_SIZE = 60;
+extern std::array<float, LEVEL_HISTORY_SIZE> levelHistory;
+extern std::array<float, LEVEL_HISTORY_SIZE> speakerLevelHistory;
 extern int levelHistoryIndex;
 
 // Colors

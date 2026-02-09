@@ -7,8 +7,8 @@
 
 #pragma comment(lib, "ws2_32.lib")
 
-#define HTTP_PORT 9876
-#define BUFFER_SIZE 4096
+constexpr int HTTP_PORT = 9876;
+constexpr size_t BUFFER_SIZE = 4096;
 
 static SOCKET serverSocket = INVALID_SOCKET;
 static std::atomic<bool> serverRunning(false);
@@ -117,7 +117,7 @@ void ServerThreadFunc() {
         timeout.tv_sec = 1;
         timeout.tv_usec = 0;
         
-        int result = select(0, &readSet, NULL, NULL, &timeout);
+        int result = select(0, &readSet, nullptr, nullptr, &timeout);
         
         if (result > 0 && FD_ISSET(serverSocket, &readSet)) {
             sockaddr_in clientAddr;

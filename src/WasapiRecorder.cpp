@@ -14,7 +14,7 @@
 template <class T> void SafeRelease(T **ppT) {
     if (*ppT) {
         (*ppT)->Release();
-        *ppT = NULL;
+        *ppT = nullptr;
     }
 }
 
@@ -22,8 +22,8 @@ WasapiRecorder::WasapiRecorder()
     : isRecording(false)
     , isPaused(false)
     , m_streamingMode(false)
-    , pwfxMic(NULL)
-    , pwfxLoopback(NULL)
+    , pwfxMic(nullptr)
+    , pwfxLoopback(nullptr)
     , m_pWriter(nullptr)
     , m_lastFlushTime(0)
 {
@@ -145,15 +145,15 @@ void WasapiRecorder::Clear() {
 // Microphone capture loop (user's voice)
 void WasapiRecorder::MicrophoneLoop() {
     HRESULT hr;
-    IMMDeviceEnumerator *pEnumerator = NULL;
-    IMMDevice *pDevice = NULL;
-    IAudioClient *pAudioClient = NULL;
-    IAudioCaptureClient *pCaptureClient = NULL;
+    IMMDeviceEnumerator *pEnumerator = nullptr;
+    IMMDevice *pDevice = nullptr;
+    IAudioClient *pAudioClient = nullptr;
+    IAudioCaptureClient *pCaptureClient = nullptr;
 
-    CoInitialize(NULL);
+    CoInitialize(nullptr);
 
     // Get Default Capture Device (Microphone)
-    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, 
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, 
                           __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
     if (FAILED(hr)) goto Exit;
 
@@ -162,7 +162,7 @@ void WasapiRecorder::MicrophoneLoop() {
 
     // Log Device Name
     {
-        IPropertyStore *pProps = NULL;
+        IPropertyStore *pProps = nullptr;
         if (SUCCEEDED(pDevice->OpenPropertyStore(STGM_READ, &pProps))) {
             PROPVARIANT varName; PropVariantInit(&varName);
             if (SUCCEEDED(pProps->GetValue(PKEY_Device_FriendlyName, &varName))) {
@@ -176,7 +176,7 @@ void WasapiRecorder::MicrophoneLoop() {
     }
 
     // Activate Audio Client
-    hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&pAudioClient);
+    hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&pAudioClient);
     if (FAILED(hr)) goto Exit;
 
     // Get Mix Format
@@ -185,7 +185,7 @@ void WasapiRecorder::MicrophoneLoop() {
     if (FAILED(hr)) goto Exit;
 
     // Initialize
-    hr = pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 10000000, 0, pwfxMic, NULL);
+    hr = pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 10000000, 0, pwfxMic, nullptr);
     if (FAILED(hr)) goto Exit;
 
     // Get Capture Service
@@ -209,7 +209,7 @@ void WasapiRecorder::MicrophoneLoop() {
 
         hr = pCaptureClient->GetNextPacketSize(&packetLength);
         while (packetLength != 0) {
-            hr = pCaptureClient->GetBuffer(&pData, &numFramesAvailable, &flags, NULL, NULL);
+            hr = pCaptureClient->GetBuffer(&pData, &numFramesAvailable, &flags, nullptr, nullptr);
             if (FAILED(hr)) break;
 
             std::lock_guard<std::mutex> lock(micBufferMutex);
@@ -243,15 +243,15 @@ Exit:
 // Loopback capture loop (system audio - CX voice)
 void WasapiRecorder::LoopbackLoop() {
     HRESULT hr;
-    IMMDeviceEnumerator *pEnumerator = NULL;
-    IMMDevice *pDevice = NULL;
-    IAudioClient *pAudioClient = NULL;
-    IAudioCaptureClient *pCaptureClient = NULL;
+    IMMDeviceEnumerator *pEnumerator = nullptr;
+    IMMDevice *pDevice = nullptr;
+    IAudioClient *pAudioClient = nullptr;
+    IAudioCaptureClient *pCaptureClient = nullptr;
 
-    CoInitialize(NULL);
+    CoInitialize(nullptr);
 
     // Get Default RENDER Device (Speaker/Output) for loopback
-    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, 
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, 
                           __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
     if (FAILED(hr)) goto Exit;
 
@@ -260,7 +260,7 @@ void WasapiRecorder::LoopbackLoop() {
 
     // Log Device Name
     {
-        IPropertyStore *pProps = NULL;
+        IPropertyStore *pProps = nullptr;
         if (SUCCEEDED(pDevice->OpenPropertyStore(STGM_READ, &pProps))) {
             PROPVARIANT varName; PropVariantInit(&varName);
             if (SUCCEEDED(pProps->GetValue(PKEY_Device_FriendlyName, &varName))) {
@@ -274,7 +274,7 @@ void WasapiRecorder::LoopbackLoop() {
     }
 
     // Activate Audio Client
-    hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&pAudioClient);
+    hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&pAudioClient);
     if (FAILED(hr)) goto Exit;
 
     // Get Mix Format
@@ -283,7 +283,7 @@ void WasapiRecorder::LoopbackLoop() {
     if (FAILED(hr)) goto Exit;
 
     // Initialize with LOOPBACK flag - this captures what's being played
-    hr = pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 10000000, 0, pwfxLoopback, NULL);
+    hr = pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 10000000, 0, pwfxLoopback, nullptr);
     if (FAILED(hr)) goto Exit;
 
     // Get Capture Service
@@ -307,7 +307,7 @@ void WasapiRecorder::LoopbackLoop() {
 
         hr = pCaptureClient->GetNextPacketSize(&packetLength);
         while (packetLength != 0) {
-            hr = pCaptureClient->GetBuffer(&pData, &numFramesAvailable, &flags, NULL, NULL);
+            hr = pCaptureClient->GetBuffer(&pData, &numFramesAvailable, &flags, nullptr, nullptr);
             if (FAILED(hr)) break;
 
             std::lock_guard<std::mutex> lock(loopbackBufferMutex);

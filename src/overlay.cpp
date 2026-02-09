@@ -19,9 +19,9 @@ void CreateOverlayWindow(HINSTANCE hInstance) {
     
     hOverlayWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
-        "MicMuteS_Overlay", NULL, WS_POPUP,
+        "MicMuteS_Overlay", nullptr, WS_POPUP,
         overlayX, overlayY, 100, 40,
-        NULL, NULL, hInstance, NULL
+        nullptr, nullptr, hInstance, nullptr
     );
     
     if (hOverlayWnd) {
@@ -35,7 +35,7 @@ void CreateOverlayWindow(HINSTANCE hInstance) {
         
         // Initial resize based on DPI
         float scale = GetWindowScale(hOverlayWnd);
-        SetWindowPos(hOverlayWnd, NULL, 0, 0, (int)(100 * scale), (int)(40 * scale), SWP_NOMOVE | SWP_NOZORDER);
+        SetWindowPos(hOverlayWnd, nullptr, 0, 0, (int)(100 * scale), (int)(40 * scale), SWP_NOMOVE | SWP_NOZORDER);
 
         ShowWindow(hOverlayWnd, SW_SHOW);
         UpdateOverlay();
@@ -52,17 +52,17 @@ void CreateMeterWindow(HINSTANCE hInstance) {
     levelHistoryIndex = 0;
     
     // Scale factor
-    float scale = GetWindowScale(NULL);
+    float scale = GetWindowScale(nullptr);
     if (meterW < 100) meterW = (int)(180 * scale);
     if (meterH < 50) meterH = (int)(100 * scale);
     
     // Use WS_THICKFRAME for resizing support
     hMeterWnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-        "MicMuteS_Meter", NULL, 
+        "MicMuteS_Meter", nullptr, 
         WS_POPUP | WS_THICKFRAME,
         meterX, meterY, meterW, meterH, 
-        NULL, NULL, hInstance, NULL
+        nullptr, nullptr, hInstance, nullptr
     );
     
     if (hMeterWnd) {
@@ -85,7 +85,7 @@ void UpdateOverlay() {
         animTarget = muted ? 1.0f : 0.0f;
         
         // Start animation timer
-        SetTimer(hOverlayWnd, 3, 16, NULL); // ~60 FPS
+        SetTimer(hOverlayWnd, 3, 16, nullptr); // ~60 FPS
     }
 }
 
@@ -101,7 +101,7 @@ void UpdateMeter() {
         levelHistoryIndex = (levelHistoryIndex + 1) % LEVEL_HISTORY_SIZE;
         
         // Invalidate without erasing background to prevent flicker
-        InvalidateRect(hMeterWnd, NULL, FALSE);
+        InvalidateRect(hMeterWnd, nullptr, FALSE);
     }
 }
 
@@ -111,7 +111,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
              // Resize logic when moved to another monitor
              RECT* const prcNewWindow = (RECT*)lParam;
              SetWindowPos(hWnd,
-                 NULL,
+                 nullptr,
                  prcNewWindow->left,
                  prcNewWindow->top,
                  prcNewWindow->right - prcNewWindow->left,
@@ -131,7 +131,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                     if (animProgress < animTarget) animProgress = animTarget;
                 }
                 
-                InvalidateRect(hWnd, NULL, TRUE);
+                InvalidateRect(hWnd, nullptr, TRUE);
                 
                 if (abs(animProgress - animTarget) < 0.001f) {
                     KillTimer(hWnd, 3);
@@ -193,7 +193,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             
             // Draw Icon
             int iconY = (rect.bottom - iconSize) / 2;
-            DrawIconEx(hdc, startX, iconY, hIcon, iconSize, iconSize, 0, NULL, DI_NORMAL);
+            DrawIconEx(hdc, startX, iconY, hIcon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
             
             // Draw Text
             RECT textRect = {startX + iconSize + padding/2, 0, rect.right, rect.bottom};
@@ -218,7 +218,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_MOUSEMOVE:
             if (isDragging) {
                 POINT pt; GetCursorPos(&pt);
-                SetWindowPos(hWnd, NULL, pt.x - dragStart.x, pt.y - dragStart.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+                SetWindowPos(hWnd, nullptr, pt.x - dragStart.x, pt.y - dragStart.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
             }
             return 0;
         
@@ -255,7 +255,7 @@ void DrawWaveform(HDC hdc, RECT rect, float* history, int historyIndex, bool isM
     // Draw Grid (dB lines)
     HPEN gridPen = CreatePen(PS_DOT, 1, RGB(40, 40, 50));
     SelectObject(hdc, gridPen);
-    MoveToEx(hdc, rect.left, centerY, NULL);
+    MoveToEx(hdc, rect.left, centerY, nullptr);
     LineTo(hdc, rect.right, centerY);
     DeleteObject(gridPen);
 
@@ -308,7 +308,7 @@ void DrawWaveform(HDC hdc, RECT rect, float* history, int historyIndex, bool isM
         int x = startX + (int)(i * stepX);
         
         // Draw mirrored bar around center
-        MoveToEx(hdc, x, centerY - halfHeight, NULL);
+        MoveToEx(hdc, x, centerY - halfHeight, nullptr);
         LineTo(hdc, x, centerY + halfHeight);
         
         SelectObject(hdc, oldPen);
@@ -393,7 +393,7 @@ LRESULT CALLBACK MeterWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             // Divider Line
             HPEN divPen = CreatePen(PS_SOLID, 1, RGB(50, 50, 60));
             SelectObject(hdcMem, divPen);
-            MoveToEx(hdcMem, 4, halfHeight, NULL);
+            MoveToEx(hdcMem, 4, halfHeight, nullptr);
             LineTo(hdcMem, rect.right - 4, halfHeight);
             DeleteObject(divPen);
 

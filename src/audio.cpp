@@ -24,8 +24,8 @@ static const char* REG_PATH_VOLUMES = "Software\\MicMute-S\\DeviceVolumes";
 
 void RegWriteVolume(const std::wstring& deviceId, float volume) {
     HKEY hKey;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\MicMute-S\\DeviceVolumes", 0, NULL, 
-        REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\MicMute-S\\DeviceVolumes", 0, nullptr, 
+        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
         RegSetValueExW(hKey, deviceId.c_str(), 0, REG_DWORD, (const BYTE*)&volume, sizeof(float));
         RegCloseKey(hKey);
     }
@@ -37,7 +37,7 @@ float RegReadVolume(const std::wstring& deviceId) {
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\MicMute-S\\DeviceVolumes", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(float);
         DWORD type = REG_DWORD;
-        RegQueryValueExW(hKey, deviceId.c_str(), NULL, &type, (BYTE*)&volume, &size);
+        RegQueryValueExW(hKey, deviceId.c_str(), nullptr, &type, (BYTE*)&volume, &size);
         RegCloseKey(hKey);
     }
     return volume;
@@ -58,7 +58,7 @@ public:
             AddRef();
             return S_OK;
         }
-        *ppv = NULL;
+        *ppv = nullptr;
         return E_NOINTERFACE;
     }
     STDMETHODIMP_(ULONG) AddRef() {
@@ -104,7 +104,7 @@ private:
 
     void InitializeCOM() {
         if (!pEnumerator) {
-            CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, 
+            CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, 
                 IID_PPV_ARGS(&pEnumerator));
         }
     }
@@ -123,8 +123,8 @@ private:
         
         if (SUCCEEDED(hr)) {
             // Check identity to see if we need to re-register callback
-            LPWSTR currentId = NULL;
-            LPWSTR newId = NULL;
+            LPWSTR currentId = nullptr;
+            LPWSTR newId = nullptr;
             
             if (pDefaultDevice) pDefaultDevice->GetId(&currentId);
             if (pNewRecDevice) pNewRecDevice->GetId(&newId);
@@ -147,8 +147,8 @@ private:
                 pEndpointVolume.Reset();
                 pMeterInfo.Reset();
 
-                pDefaultDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pMeterInfo);
-                pDefaultDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pEndpointVolume);
+                pDefaultDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, nullptr, (void**)&pMeterInfo);
+                pDefaultDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&pEndpointVolume);
 
                 // Register new callback
                 if (pEndpointVolume && !pVolumeCallback) {
@@ -160,9 +160,9 @@ private:
                 deviceChanged = true;
             } else {
                  // Even if same device, make sure interfaces are alive
-                 if (!pMeterInfo) pDefaultDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pMeterInfo);
+                 if (!pMeterInfo) pDefaultDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, nullptr, (void**)&pMeterInfo);
                  if (!pEndpointVolume) {
-                     pDefaultDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pEndpointVolume);
+                     pDefaultDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&pEndpointVolume);
                      if (pEndpointVolume && pVolumeCallback) {
                          pEndpointVolume->RegisterControlChangeNotify(pVolumeCallback.Get());
                      }
@@ -184,7 +184,7 @@ private:
         if (SUCCEEDED(hr)) {
             if (!pSpeakerDevice) {
                 pSpeakerDevice = pNewRenderDevice;
-                pSpeakerDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, NULL, (void**)&pSpeakerMeterInfo);
+                pSpeakerDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, nullptr, (void**)&pSpeakerMeterInfo);
             }
         } else {
              pSpeakerDevice.Reset();
@@ -287,8 +287,8 @@ public:
                 ComPtr<IMMDevice> pDevice;
                 if (SUCCEEDED(pCollection->Item(i, &pDevice))) {
                     ComPtr<IAudioEndpointVolume> pVol;
-                    if (SUCCEEDED(pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pVol))) {
-                        LPWSTR wstrId = NULL;
+                    if (SUCCEEDED(pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&pVol))) {
+                        LPWSTR wstrId = nullptr;
                         pDevice->GetId(&wstrId);
                         std::wstring deviceId = wstrId ? wstrId : L"Unknown";
                         if (wstrId) CoTaskMemFree(wstrId);
@@ -303,15 +303,15 @@ public:
                                 RegWriteVolume(deviceId, currentVol);
                             }
                             
-                            pVol->SetMasterVolumeLevelScalar(0.0f, NULL);
-                            pVol->SetMute(TRUE, NULL);
+                            pVol->SetMasterVolumeLevelScalar(0.0f, nullptr);
+                            pVol->SetMute(TRUE, nullptr);
                         } else {
                             // UNMUTE OPERATION
                             float savedVol = RegReadVolume(deviceId);
                             if (savedVol < 0.0f || savedVol > 1.0f) savedVol = 1.0f;
                             
-                            pVol->SetMasterVolumeLevelScalar(savedVol, NULL);
-                            pVol->SetMute(FALSE, NULL);
+                            pVol->SetMasterVolumeLevelScalar(savedVol, nullptr);
+                            pVol->SetMute(FALSE, nullptr);
                         }
                     }
                 }

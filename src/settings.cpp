@@ -1,6 +1,6 @@
 #include "settings.h"
 #include "globals.h"
-#include <cstdio> // For NULL
+#include <cstdio> // For nullptr
 
 void SaveOverlayPosition() {
     if (!hOverlayWnd) return;
@@ -18,8 +18,8 @@ void LoadOverlayPosition(int* x, int* y) {
     HKEY hKey;
     if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD);
-        RegQueryValueEx(hKey, "OverlayX", NULL, NULL, (BYTE*)x, &size);
-        RegQueryValueEx(hKey, "OverlayY", NULL, NULL, (BYTE*)y, &size);
+        RegQueryValueEx(hKey, "OverlayX", nullptr, nullptr, (BYTE*)x, &size);
+        RegQueryValueEx(hKey, "OverlayY", nullptr, nullptr, (BYTE*)y, &size);
         RegCloseKey(hKey);
     }
 }
@@ -47,10 +47,10 @@ void LoadMeterPosition(int* x, int* y, int* w, int* h) {
     HKEY hKey;
     if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD);
-        RegQueryValueEx(hKey, "MeterX", NULL, NULL, (BYTE*)x, &size);
-        RegQueryValueEx(hKey, "MeterY", NULL, NULL, (BYTE*)y, &size);
-        RegQueryValueEx(hKey, "MeterW", NULL, NULL, (BYTE*)w, &size);
-        RegQueryValueEx(hKey, "MeterH", NULL, NULL, (BYTE*)h, &size);
+        RegQueryValueEx(hKey, "MeterX", nullptr, nullptr, (BYTE*)x, &size);
+        RegQueryValueEx(hKey, "MeterY", nullptr, nullptr, (BYTE*)y, &size);
+        RegQueryValueEx(hKey, "MeterW", nullptr, nullptr, (BYTE*)w, &size);
+        RegQueryValueEx(hKey, "MeterH", nullptr, nullptr, (BYTE*)h, &size);
         RegCloseKey(hKey);
     }
 }
@@ -82,20 +82,20 @@ void LoadSettings() {
     HKEY hKey;
     if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD), val = 0;
-        if (RegQueryValueEx(hKey, "ShowOverlay", NULL, NULL, (BYTE*)&val, &size) == ERROR_SUCCESS)
+        if (RegQueryValueEx(hKey, "ShowOverlay", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             showOverlay = val != 0;
-        if (RegQueryValueEx(hKey, "ShowMeter", NULL, NULL, (BYTE*)&val, &size) == ERROR_SUCCESS)
+        if (RegQueryValueEx(hKey, "ShowMeter", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             showMeter = val != 0;
-        if (RegQueryValueEx(hKey, "ShowRecorder", NULL, NULL, (BYTE*)&val, &size) == ERROR_SUCCESS)
+        if (RegQueryValueEx(hKey, "ShowRecorder", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             showRecorder = val != 0;
-        if (RegQueryValueEx(hKey, "ShowNotifications", NULL, NULL, (BYTE*)&val, &size) == ERROR_SUCCESS)
+        if (RegQueryValueEx(hKey, "ShowNotifications", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             showNotifications = val != 0;
-        if (RegQueryValueEx(hKey, "AutoRecordCalls", NULL, NULL, (BYTE*)&val, &size) == ERROR_SUCCESS)
+        if (RegQueryValueEx(hKey, "AutoRecordCalls", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             autoRecordCalls = val != 0;
             
         char buffer[MAX_PATH] = {0};
         DWORD bufSize = sizeof(buffer);
-        if (RegQueryValueEx(hKey, "RecordingFolder", NULL, NULL, (BYTE*)buffer, &bufSize) == ERROR_SUCCESS) {
+        if (RegQueryValueEx(hKey, "RecordingFolder", nullptr, nullptr, (BYTE*)buffer, &bufSize) == ERROR_SUCCESS) {
             recordingFolder = buffer;
         }
 
@@ -109,7 +109,7 @@ void ManageStartup(bool enable) {
     if (RegOpenKey(HKEY_CURRENT_USER, path, &hKey) == ERROR_SUCCESS) {
         if (enable) {
             char exe[MAX_PATH];
-            GetModuleFileName(NULL, exe, MAX_PATH);
+            GetModuleFileName(nullptr, exe, MAX_PATH);
             RegSetValueEx(hKey, "MicMute-S", 0, REG_SZ, (BYTE*)exe, (DWORD)(strlen(exe) + 1));
         } else {
             RegDeleteValue(hKey, "MicMute-S");
@@ -122,7 +122,7 @@ bool IsStartupEnabled() {
     HKEY hKey;
     bool exists = false;
     if (RegOpenKey(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", &hKey) == ERROR_SUCCESS) {
-        if (RegQueryValueEx(hKey, "MicMute-S", NULL, NULL, NULL, NULL) == ERROR_SUCCESS)
+        if (RegQueryValueEx(hKey, "MicMute-S", nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS)
             exists = true;
         RegCloseKey(hKey);
     }

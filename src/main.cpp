@@ -8,6 +8,7 @@
 #include <dwmapi.h>
 #include <commctrl.h>
 #include <string>
+#include <array>
 #include "resource.h"
 #include "globals.h"
 #include "settings.h"
@@ -62,8 +63,8 @@ bool isPressedMin = false;
 HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck, hNotifyCheck, hAutoRecordCheck;
 
 // Tab Labels
-const char* tabNames[] = { "General", "Hotkeys", "Audio", "Appearance" };
-#define TAB_COUNT 4
+constexpr std::array<const char*, 4> tabNames = { "General", "Hotkeys", "Audio", "Appearance" };
+constexpr int TAB_COUNT = 4;
 
 void UpdateControlVisibility() {
     bool isGeneral = (currentTab == 0);
@@ -78,16 +79,16 @@ void UpdateControlVisibility() {
     ShowWindow(hAutoRecordCheck, showGeneral);
     
     // Repaint to clear/draw proper background
-    InvalidateRect(hMainWnd, NULL, TRUE);
+    InvalidateRect(hMainWnd, nullptr, TRUE);
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     // Initialize COM
-    HRESULT hr = CoInitialize(NULL);
+    HRESULT hr = CoInitialize(nullptr);
     if (FAILED(hr)) return 0;
 
     // Single Instance
-    HANDLE hMutex = CreateMutex(NULL, TRUE, "MicMuteS_SingleInstanceMutex");
+    HANDLE hMutex = CreateMutex(nullptr, TRUE, "MicMuteS_SingleInstanceMutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         HWND hExisting = FindWindow("MicMuteS_Class", "MicMute-S");
         if (hExisting) {
@@ -121,7 +122,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH); // Transparency for Mica
     wc.lpszClassName = "MicMuteS_Class";
     wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
@@ -133,7 +134,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wcOverlay.style = CS_HREDRAW | CS_VREDRAW;
     wcOverlay.lpfnWndProc = OverlayWndProc;
     wcOverlay.hInstance = hInstance;
-    wcOverlay.hCursor = LoadCursor(NULL, IDC_HAND);
+    wcOverlay.hCursor = LoadCursor(nullptr, IDC_HAND);
     wcOverlay.hbrBackground = hBrushChroma;
     wcOverlay.lpszClassName = "MicMuteS_Overlay";
     RegisterClassEx(&wcOverlay);
@@ -143,7 +144,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wcMeter.style = CS_HREDRAW | CS_VREDRAW;
     wcMeter.lpfnWndProc = MeterWndProc;
     wcMeter.hInstance = hInstance;
-    wcMeter.hCursor = LoadCursor(NULL, IDC_SIZEALL);
+    wcMeter.hCursor = LoadCursor(nullptr, IDC_SIZEALL);
     wcMeter.hbrBackground = hBrushMeterBg;
     wcMeter.lpszClassName = "MicMuteS_Meter";
     RegisterClassEx(&wcMeter);
@@ -153,7 +154,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wcRec.style = CS_HREDRAW | CS_VREDRAW;
     wcRec.lpfnWndProc = RecorderWndProc;
     wcRec.hInstance = hInstance;
-    wcRec.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wcRec.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wcRec.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     wcRec.lpszClassName = "MicMuteS_Recorder";
     RegisterClassEx(&wcRec);
@@ -170,7 +171,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         0, "MicMuteS_Class", "MicMute-S",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         x, y, width, height, 
-        NULL, NULL, hInstance, NULL
+        nullptr, nullptr, hInstance, nullptr
     );
     
     if (!hMainWnd) return 0;
@@ -228,14 +229,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     AddTrayIcon(hMainWnd);
     UpdateUIState();
 
-    SetTimer(hMainWnd, 1, 50, NULL);
-    SetTimer(hMainWnd, 2, 2000, NULL);
+    SetTimer(hMainWnd, 1, 50, nullptr);
+    SetTimer(hMainWnd, 2, 2000, nullptr);
 
     ShowWindow(hMainWnd, nCmdShow);
     UpdateWindow(hMainWnd);
 
     MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
+    while (GetMessage(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
@@ -280,7 +281,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // Status Label (Top Right Area)
             // REMOVED: Static control blocks dragging. We will draw this manually in WM_PAINT.
             // CreateWindow("STATIC", "Checking...", WS_VISIBLE | WS_CHILD | SS_CENTER, 
-            //    SIDEBAR_WIDTH, 30, 850 - SIDEBAR_WIDTH, 40, hWnd, (HMENU)ID_STATUS_LABEL, hInst, NULL);
+            //    SIDEBAR_WIDTH, 30, 850 - SIDEBAR_WIDTH, 40, hWnd, (HMENU)ID_STATUS_LABEL, hInst, nullptr);
 
             // -- GENERAL TAB TOGGLES --
             // Positioned in the content area (Right of Sidebar)
@@ -290,42 +291,42 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             hStartupCheck = CreateWindow("BUTTON", "Launch on Windows startup", 
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
-                contentX, startY, 300, 30, hWnd, (HMENU)ID_RUN_STARTUP, hInst, NULL);
+                contentX, startY, 300, 30, hWnd, (HMENU)ID_RUN_STARTUP, hInst, nullptr);
             SendMessage(hStartupCheck, BM_SETCHECK, isRunOnStartup ? BST_CHECKED : BST_UNCHECKED, 0);
 
             hOverlayCheck = CreateWindow("BUTTON", "Show floating mute button", 
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
-                contentX, startY + gapY, 300, 30, hWnd, (HMENU)ID_SHOW_OVERLAY, hInst, NULL);
+                contentX, startY + gapY, 300, 30, hWnd, (HMENU)ID_SHOW_OVERLAY, hInst, nullptr);
             SendMessage(hOverlayCheck, BM_SETCHECK, showOverlay ? BST_CHECKED : BST_UNCHECKED, 0);
 
             hMeterCheck = CreateWindow("BUTTON", "Show voice level meter", 
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
-                contentX, startY + gapY*2, 300, 30, hWnd, (HMENU)ID_SHOW_METER, hInst, NULL);
+                contentX, startY + gapY*2, 300, 30, hWnd, (HMENU)ID_SHOW_METER, hInst, nullptr);
             SendMessage(hMeterCheck, BM_SETCHECK, showMeter ? BST_CHECKED : BST_UNCHECKED, 0);
 
             hRecorderCheck = CreateWindow("BUTTON", "Show call recorder", 
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
-                contentX, startY + gapY*3, 300, 30, hWnd, (HMENU)ID_SHOW_RECORDER, hInst, NULL);
+                contentX, startY + gapY*3, 300, 30, hWnd, (HMENU)ID_SHOW_RECORDER, hInst, nullptr);
             SendMessage(hRecorderCheck, BM_SETCHECK, showRecorder ? BST_CHECKED : BST_UNCHECKED, 0);
 
             hNotifyCheck = CreateWindow("BUTTON", "Show system notifications", 
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
-                contentX, startY + gapY*4, 300, 30, hWnd, (HMENU)ID_SHOW_NOTIFICATIONS, hInst, NULL);
+                contentX, startY + gapY*4, 300, 30, hWnd, (HMENU)ID_SHOW_NOTIFICATIONS, hInst, nullptr);
             SendMessage(hNotifyCheck, BM_SETCHECK, showNotifications ? BST_CHECKED : BST_UNCHECKED, 0);
 
             hAutoRecordCheck = CreateWindow("BUTTON", "Auto record calls (Ozonetel)", 
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
-                contentX, startY + gapY*5, 350, 30, hWnd, (HMENU)ID_AUTO_RECORD_CALLS, hInst, NULL);
+                contentX, startY + gapY*5, 350, 30, hWnd, (HMENU)ID_AUTO_RECORD_CALLS, hInst, nullptr);
             SendMessage(hAutoRecordCheck, BM_SETCHECK, autoRecordCalls ? BST_CHECKED : BST_UNCHECKED, 0);
             
             // Extension connection status (shown when Auto Record is enabled)
             CreateWindow("STATIC", "", 
                 WS_CHILD | SS_LEFT, 
-                contentX, startY + gapY*6, 350, 20, hWnd, (HMENU)9998, hInst, NULL);
+                contentX, startY + gapY*6, 350, 20, hWnd, (HMENU)9998, hInst, nullptr);
 
             // Footer - Use dynamic positioning
             CreateWindow("STATIC", "by Suvojeet Sengupta", 
-                 WS_VISIBLE | WS_CHILD | SS_RIGHT, 0, 0, 0, 0, hWnd, (HMENU)9999, hInst, NULL);
+                 WS_VISIBLE | WS_CHILD | SS_RIGHT, 0, 0, 0, 0, hWnd, (HMENU)9999, hInst, nullptr);
 
             UpdateControlVisibility();
             break;
@@ -517,7 +518,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (y >= itemTop && y < itemBottom) {
                         currentTab = i;
                         UpdateControlVisibility();
-                        InvalidateRect(hWnd, NULL, TRUE); 
+                        InvalidateRect(hWnd, nullptr, TRUE); 
                         break;
                     }
                 }
@@ -567,40 +568,40 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (wmId == ID_RUN_STARTUP) {
                 isRunOnStartup = !isRunOnStartup;
                 ManageStartup(isRunOnStartup);
-                InvalidateRect(hStartupCheck, NULL, FALSE);
+                InvalidateRect(hStartupCheck, nullptr, FALSE);
             }
             else if (wmId == ID_SHOW_OVERLAY) {
                 showOverlay = !showOverlay;
                 SaveSettings();
                 if (showOverlay) {
-                    if (!hOverlayWnd) CreateOverlayWindow(GetModuleHandle(NULL));
+                    if (!hOverlayWnd) CreateOverlayWindow(GetModuleHandle(nullptr));
                     else ShowWindow(hOverlayWnd, SW_SHOW);
                     UpdateOverlay();
                 } else if (hOverlayWnd) ShowWindow(hOverlayWnd, SW_HIDE);
-                InvalidateRect(hOverlayCheck, NULL, FALSE);
+                InvalidateRect(hOverlayCheck, nullptr, FALSE);
             }
             else if (wmId == ID_SHOW_METER) {
                 showMeter = !showMeter;
                 SaveSettings();
                 if (showMeter) {
-                    if (!hMeterWnd) CreateMeterWindow(GetModuleHandle(NULL));
+                    if (!hMeterWnd) CreateMeterWindow(GetModuleHandle(nullptr));
                     else ShowWindow(hMeterWnd, SW_SHOW);
                 } else if (hMeterWnd) ShowWindow(hMeterWnd, SW_HIDE);
-                InvalidateRect(hMeterCheck, NULL, FALSE);
+                InvalidateRect(hMeterCheck, nullptr, FALSE);
             }
             else if (wmId == ID_SHOW_RECORDER) {
                 showRecorder = !showRecorder;
                 SaveSettings();
                 if (showRecorder) {
-                    if (!hRecorderWnd) CreateRecorderWindow(GetModuleHandle(NULL));
+                    if (!hRecorderWnd) CreateRecorderWindow(GetModuleHandle(nullptr));
                     else ShowWindow(hRecorderWnd, SW_SHOW);
                 } else if (hRecorderWnd) ShowWindow(hRecorderWnd, SW_HIDE);
-                InvalidateRect(hRecorderCheck, NULL, FALSE);
+                InvalidateRect(hRecorderCheck, nullptr, FALSE);
             }
             else if (wmId == ID_SHOW_NOTIFICATIONS) {
                 showNotifications = !showNotifications;
                 SaveSettings();
-                InvalidateRect((HWND)lParam, NULL, FALSE);
+                InvalidateRect((HWND)lParam, nullptr, FALSE);
             }
             else if (wmId == ID_AUTO_RECORD_CALLS) {
                 autoRecordCalls = !autoRecordCalls;
@@ -612,7 +613,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         g_CallRecorder->Disable();
                     }
                 }
-                InvalidateRect(hAutoRecordCheck, NULL, FALSE);
+                InvalidateRect(hAutoRecordCheck, nullptr, FALSE);
             }
             else if (wmId == ID_TRAY_OPEN) {
                 ShowWindow(hWnd, SW_RESTORE);
@@ -638,10 +639,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 POINT pt; GetCursorPos(&pt);
                 HMENU hMenu = CreatePopupMenu();
                 AppendMenu(hMenu, MF_STRING, ID_TRAY_OPEN, "Open Settings");
-                AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
+                AppendMenu(hMenu, MF_SEPARATOR, 0, nullptr);
                 AppendMenu(hMenu, MF_STRING, ID_TRAY_EXIT, "Exit");
                 SetForegroundWindow(hWnd);
-                TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, hWnd, NULL);
+                TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, hWnd, nullptr);
                 DestroyMenu(hMenu);
             }
             break;
@@ -655,7 +656,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (hFooter) {
                 MoveWindow(hFooter, rcClient.right - 160, rcClient.bottom - 40, 140, 20, TRUE);
             }
-            InvalidateRect(hWnd, NULL, TRUE);
+            InvalidateRect(hWnd, nullptr, TRUE);
             break;
         }
 
@@ -667,7 +668,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     g_CallRecorder->Poll();
                     // Trigger repaint for animation when auto-recording is active
                     if (hRecorderWnd && showRecorder) {
-                        InvalidateRect(hRecorderWnd, NULL, FALSE);
+                        InvalidateRect(hRecorderWnd, nullptr, FALSE);
                     }
                 }
                 

@@ -18,7 +18,7 @@ void UpdateUIState() {
         ShowTrayNotification(muted); // Trigger Toast
 
         // Invalidate main window to redraw status text
-        InvalidateRect(hMainWnd, NULL, TRUE);
+        InvalidateRect(hMainWnd, nullptr, TRUE);
     }
 }
 

@@ -46,7 +46,7 @@ static bool DirectoryExists(const std::string& path) {
 // Helper: Create directory
 static bool CreateDirectoryIfNeeded(const std::string& path) {
     if (DirectoryExists(path)) return true;
-    return CreateDirectoryA(path.c_str(), NULL) != 0;
+    return CreateDirectoryA(path.c_str(), nullptr) != 0;
 }
 
 CallAutoRecorder::CallAutoRecorder()

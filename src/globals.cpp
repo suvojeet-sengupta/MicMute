@@ -3,8 +3,8 @@
 // Variables
 NOTIFYICONDATA nid;
 HWND hMainWnd;
-HWND hOverlayWnd = NULL;
-HWND hMeterWnd = NULL;
+HWND hOverlayWnd = nullptr;
+HWND hMeterWnd = nullptr;
 
 bool isRunOnStartup = false;
 bool showOverlay = false;
@@ -24,13 +24,13 @@ HFONT hFontOverlay;
 DWORD lastToggleTime = 0;
 int skipTimerCycles = 0;
 
-HICON hIconMicOn = NULL;
-HICON hIconMicOff = NULL;
+HICON hIconMicOn = nullptr;
+HICON hIconMicOff = nullptr;
 
 int overlayOpacity = 220;
 
-float levelHistory[LEVEL_HISTORY_SIZE] = {0};
-float speakerLevelHistory[LEVEL_HISTORY_SIZE] = {0};
+std::array<float, LEVEL_HISTORY_SIZE> levelHistory = {};
+std::array<float, LEVEL_HISTORY_SIZE> speakerLevelHistory = {};
 int levelHistoryIndex = 0;
 
 // Color Definitions
@@ -81,8 +81,8 @@ float GetWindowScale(HWND hWnd) {
     }
     
     // Fallback: System DPI
-    HDC hdc = GetDC(NULL);
+    HDC hdc = GetDC(nullptr);
     int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
-    ReleaseDC(NULL, hdc);
+    ReleaseDC(nullptr, hdc);
     return dpi / 96.0f;
 }

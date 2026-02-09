@@ -15,7 +15,7 @@
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "comdlg32.lib")
 
-HWND hRecorderWnd = NULL;
+HWND hRecorderWnd = nullptr;
 static WasapiRecorder recorder; // Global instance
 
 // Button IDs (Local)
@@ -24,7 +24,7 @@ static WasapiRecorder recorder; // Global instance
 #define BTN_FOLDER      2003
 
 // Tooltips
-HWND hToolTip = NULL;
+HWND hToolTip = nullptr;
 
 // Auto-record status notification
 static std::string lastSavedFileName;
@@ -54,8 +54,8 @@ void LoadRecorderPosition(int* x, int* y, int* w, int* h) {
     HKEY hKey;
     if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD);
-        RegQueryValueEx(hKey, "RecorderX", NULL, NULL, (BYTE*)x, &size);
-        RegQueryValueEx(hKey, "RecorderY", NULL, NULL, (BYTE*)y, &size);
+        RegQueryValueEx(hKey, "RecorderX", nullptr, nullptr, (BYTE*)x, &size);
+        RegQueryValueEx(hKey, "RecorderY", nullptr, nullptr, (BYTE*)y, &size);
         RegCloseKey(hKey);
     }
 }
@@ -73,7 +73,7 @@ void NotifyAutoRecordSaved(const std::string& filename) {
     lastSavedFileName = filename;
     savedNotifyStartTime = GetTickCount();
     if (hRecorderWnd) {
-        InvalidateRect(hRecorderWnd, NULL, FALSE);
+        InvalidateRect(hRecorderWnd, nullptr, FALSE);
     }
 }
 
@@ -121,7 +121,7 @@ bool CreateDirectoryIfNeeded(const std::string& path) {
     if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) {
         return true; // Already exists
     }
-    return CreateDirectoryA(path.c_str(), NULL) != 0;
+    return CreateDirectoryA(path.c_str(), nullptr) != 0;
 }
 
 // Get date folder path and create if needed
@@ -183,14 +183,14 @@ void DrawIconBtn(LPDRAWITEMSTRUCT lpDrawItem, int type) {
 
 void UpdateRecorderUI(HWND hWnd) {
     // Invalidate buttons to redraw icons
-    InvalidateRect(GetDlgItem(hWnd, BTN_START_PAUSE), NULL, FALSE);
-    InvalidateRect(GetDlgItem(hWnd, BTN_STOP_SAVE), NULL, FALSE);
+    InvalidateRect(GetDlgItem(hWnd, BTN_START_PAUSE), nullptr, FALSE);
+    InvalidateRect(GetDlgItem(hWnd, BTN_STOP_SAVE), nullptr, FALSE);
     
     HWND hBtnStop = GetDlgItem(hWnd, BTN_STOP_SAVE);
     EnableWindow(hBtnStop, recorder.IsRecording());
     
     // Force repaint of status text area
-    InvalidateRect(hWnd, NULL, FALSE);
+    InvalidateRect(hWnd, nullptr, FALSE);
 }
 
 void LayoutRecorderUI(HWND hWnd) {
@@ -219,7 +219,7 @@ void CreateRecorderWindow(HINSTANCE hInstance) {
     LoadRecorderPosition(&x, &y, &w, &h);
     
     // Enforce size (thin bar)
-    float scale = GetWindowScale(NULL);
+    float scale = GetWindowScale(nullptr);
     w = (int)(420 * scale);
     h = (int)(60 * scale);
     
@@ -228,7 +228,7 @@ void CreateRecorderWindow(HINSTANCE hInstance) {
         "MicMuteS_Recorder", "Call Recorder", 
         WS_POPUP | WS_SYSMENU | WS_CLIPCHILDREN, // Clip children to prevent button flicker
         x, y, w, h,
-        NULL, NULL, hInstance, NULL
+        nullptr, nullptr, hInstance, nullptr
     );
     
     if (hRecorderWnd) {
@@ -237,13 +237,13 @@ void CreateRecorderWindow(HINSTANCE hInstance) {
         
         // Create Buttons (Owner Draw)
         CreateWindow("BUTTON", "Start", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 
-            0, 0, 0, 0, hRecorderWnd, (HMENU)BTN_START_PAUSE, hInstance, NULL);
+            0, 0, 0, 0, hRecorderWnd, (HMENU)BTN_START_PAUSE, hInstance, nullptr);
 
         CreateWindow("BUTTON", "Stop", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 
-            0, 0, 0, 0, hRecorderWnd, (HMENU)BTN_STOP_SAVE, hInstance, NULL);
+            0, 0, 0, 0, hRecorderWnd, (HMENU)BTN_STOP_SAVE, hInstance, nullptr);
             
         CreateWindow("BUTTON", "Folder", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 
-            0, 0, 0, 0, hRecorderWnd, (HMENU)BTN_FOLDER, hInstance, NULL);
+            0, 0, 0, 0, hRecorderWnd, (HMENU)BTN_FOLDER, hInstance, nullptr);
 
         LayoutRecorderUI(hRecorderWnd);
         ShowWindow(hRecorderWnd, SW_SHOW);
