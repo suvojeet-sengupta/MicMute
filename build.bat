@@ -18,7 +18,7 @@ if %errorlevel% neq 0 (
 )
 
 echo Compiling C++ Application...
-cl.exe /nologo /O2 /EHsc /std:c++latest /D "NDEBUG" /D "_WINDOWS" /W3 /Fe"build\Release\MicMute-S.exe" ^
+cl.exe /nologo /O2 /EHsc /std:c++23 /D "NDEBUG" /D "_WINDOWS" /W3 /Fe"build\Release\MicMute-S.exe" ^
     src\main.cpp src\audio.cpp src\globals.cpp src\settings.cpp src\tray.cpp ^
     src\overlay.cpp src\ui.cpp src\recorder.cpp src\WasapiRecorder.cpp ^
     src\StreamingWavWriter.cpp src\ui_controls.cpp src\call_recorder.cpp ^
