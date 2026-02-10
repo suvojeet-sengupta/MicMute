@@ -71,6 +71,8 @@ void SaveSettings() {
         RegSetValueEx(hKey, "ShowNotifications", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
         val = autoRecordCalls ? 1 : 0;
         RegSetValueEx(hKey, "AutoRecordCalls", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+        val = beepOnCall ? 1 : 0;
+        RegSetValueEx(hKey, "BeepOnCall", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
         
         // Control panel visibility toggles
         val = showMuteBtn ? 1 : 0;
@@ -132,6 +134,8 @@ void LoadSettings() {
             showNotifications = val != 0;
         if (RegQueryValueEx(hKey, "AutoRecordCalls", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             autoRecordCalls = val != 0;
+        if (RegQueryValueEx(hKey, "BeepOnCall", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            beepOnCall = val != 0;
         
         // Control panel visibility toggles (override legacy if present)
         size = sizeof(DWORD);

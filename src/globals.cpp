@@ -15,6 +15,7 @@ bool showNotifications = true;
 std::string recordingFolder = "";
 std::string userName = "Suvojeet Sengupta";
 bool autoRecordCalls = false;
+bool beepOnCall = true;
 
 // Control Panel visibility (all visible by default)
 bool showMuteBtn = true;

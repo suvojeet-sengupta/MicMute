@@ -124,6 +124,12 @@ void CallAutoRecorder::Disable() {
 
 void CallAutoRecorder::TransitionTo(State newState) {
     currentState = newState;
+    
+    // Play beep if starting recording and enabled
+    if (newState == State::RECORDING && beepOnCall) {
+        // High pitch beep (750Hz) for 300ms 
+        Beep(750, 300);
+    }
 }
 
 void CallAutoRecorder::Poll() {

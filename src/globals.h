@@ -24,6 +24,7 @@ extern bool showMeter;
 extern bool showRecorder;
 extern bool showNotifications;
 extern bool autoRecordCalls;
+extern bool beepOnCall;
 
 // Control Panel visibility toggles
 extern bool showMuteBtn;

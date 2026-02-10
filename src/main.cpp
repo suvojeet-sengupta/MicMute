@@ -66,6 +66,7 @@ bool isPressedMin = false;
 
 // General Tab Controls
 HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck, hNotifyCheck, hAutoRecordCheck;
+HWND hBeepCheck;
 
 // Hide/Unhide Tab Controls
 HWND hHideMuteBtn, hHideVoiceMeter, hHideRecStatus, hHideCallStats, hHideManualRec;
@@ -88,7 +89,9 @@ void UpdateControlVisibility() {
     ShowWindow(hMeterCheck, showGeneral);
     ShowWindow(hRecorderCheck, showGeneral);
     ShowWindow(hNotifyCheck, showGeneral);
+    ShowWindow(hNotifyCheck, showGeneral);
     ShowWindow(hAutoRecordCheck, showGeneral);
+    if (hBeepCheck) ShowWindow(hBeepCheck, showGeneral);
     
     // Hide/Unhide tab
     int showHide = isHide ? SW_SHOW : SW_HIDE;
@@ -348,11 +351,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
                 contentX, startY + gapY*5, 350, 30, hWnd, (HMENU)ID_AUTO_RECORD_CALLS, hInst, nullptr);
             SendMessage(hAutoRecordCheck, BM_SETCHECK, autoRecordCalls ? BST_CHECKED : BST_UNCHECKED, 0);
+
+            hBeepCheck = CreateWindow("BUTTON", "Beep on call detected", 
+                WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
+                contentX, startY + gapY*6, 350, 30, hWnd, (HMENU)ID_BEEP_ON_CALL, hInst, nullptr);
+            SendMessage(hBeepCheck, BM_SETCHECK, beepOnCall ? BST_CHECKED : BST_UNCHECKED, 0);
             
             // Extension status
             CreateWindow("STATIC", "", 
                 WS_CHILD | SS_LEFT, 
-                contentX, startY + gapY*6, 350, 20, hWnd, (HMENU)9998, hInst, nullptr);
+                contentX, startY + gapY*7, 350, 20, hWnd, (HMENU)9998, hInst, nullptr);
 
             // === Hide/Unhide Tab Toggles ===
             hHideMuteBtn = CreateWindow("BUTTON", "Mute/Unmute Button",
@@ -731,6 +739,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     else g_CallRecorder->Disable();
                 }
                 InvalidateRect(hAutoRecordCheck, nullptr, FALSE);
+            }
+            else if (wmId == ID_BEEP_ON_CALL) {
+                beepOnCall = !beepOnCall;
+                SaveSettings();
+                InvalidateRect(hBeepCheck, nullptr, FALSE);
             }
             // Hide/Unhide tab toggles
             else if (wmId == ID_HIDE_MUTE_BTN) {

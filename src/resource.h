@@ -17,6 +17,7 @@
 #define ID_SHOW_NOTIFICATIONS 1011
 #define ID_TAB_CONTROL   1010
 #define ID_AUTO_RECORD_CALLS 1012
+#define ID_BEEP_ON_CALL      1013
 
 // Hide/Unhide tab controls
 #define ID_HIDE_MUTE_BTN     1020
