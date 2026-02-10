@@ -148,8 +148,10 @@ void LoadSettings() {
         
         // Panel size mode
         size = sizeof(DWORD);
-        if (RegQueryValueEx(hKey, "PanelSizeMode", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+        if (RegQueryValueEx(hKey, "PanelSizeMode", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS) {
             panelSizeMode = (int)val;
+            if (panelSizeMode < 0 || panelSizeMode > 2) panelSizeMode = 1;
+        }
         
         // User name
         char nameBuf[256] = {0};
