@@ -36,11 +36,20 @@ jobs:
     - name: Build Installer
       run: iscc installer.iss
 
+    - name: Zip Ozonetel Extension
+      run: Compress-Archive -Path extension\* -DestinationPath build\Release\MicMute-Ozonetel-Extension.zip
+
     - name: Upload Build Artifacts (Exe)
       uses: actions/upload-artifact@v4
       with:
         name: MicMute-S-Executable
         path: build/Release/MicMute-S.exe
+
+    - name: Upload Ozonetel Extension
+      uses: actions/upload-artifact@v4
+      with:
+        name: MicMute-Ozonetel-Extension
+        path: build/Release/MicMute-Ozonetel-Extension.zip
 
     - name: Upload Installer
       uses: actions/upload-artifact@v4
@@ -71,9 +80,11 @@ jobs:
           ### Downloads
           - `MicMute-S-Setup.exe` - Full installer (Recommended)
           - `MicMute-S.exe` - Portable executable
+          - `MicMute-Ozonetel-Extension.zip` - Chrome Extension for Ozonetel integration
         files: |
           installer/MicMute-S-Setup.exe
           build/Release/MicMute-S.exe
+          build/Release/MicMute-Ozonetel-Extension.zip
         draft: false
         prerelease: false
       env:
