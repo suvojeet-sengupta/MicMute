@@ -22,6 +22,7 @@
 #define CPANEL_BTN_MUTE       3001
 #define CPANEL_BTN_REC_START  3002
 #define CPANEL_BTN_REC_STOP   3003
+#define CPANEL_BTN_SETTINGS   3004
 
 // Animation state
 static int cpAnimFrame = 0;
@@ -518,6 +519,44 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     SelectObject(mem, hFontSmall);
                     DrawText(mem, stats.c_str(), -1, &badgeRect, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
                 }
+                drawX += 100 + margin;
+            }
+
+            // === Section 6: Settings Button ===
+            {
+                int btnW = 28;
+                int btnH = 28;
+                int bY = (panelH - btnH) / 2;
+                RECT rc = {rect.right - btnW - margin, bY, rect.right - margin, bY + btnH};
+
+                HBRUSH br = CreateSolidBrush(RGB(45, 45, 60));
+                FillRect(mem, &rc, br);
+                DeleteObject(br);
+
+                // Draw a simple gear/cog or home icon
+                int cx = (rc.left + rc.right) / 2;
+                int cy = (rc.top + rc.bottom) / 2;
+                
+                HPEN gearPen = CreatePen(PS_SOLID, 2, colorText);
+                SelectObject(mem, gearPen);
+                SelectObject(mem, GetStockObject(NULL_BRUSH));
+                
+                // Gear body
+                Ellipse(mem, cx - 6, cy - 6, cx + 6, cy + 6);
+                
+                // Teeth
+                for (int i = 0; i < 8; i++) {
+                    double angle = i * 3.14159 / 4.0;
+                    int x1 = cx + (int)(6 * cos(angle));
+                    int y1 = cy + (int)(6 * sin(angle));
+                    int x2 = cx + (int)(9 * cos(angle));
+                    int y2 = cy + (int)(9 * sin(angle));
+                    MoveToEx(mem, x1, y1, nullptr);
+                    LineTo(mem, x2, y2);
+                }
+                
+                SelectObject(mem, GetStockObject(BLACK_PEN));
+                DeleteObject(gearPen);
             }
 
             // Blit
@@ -589,6 +628,20 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
                     extern void ChangeRecordingFolder(HWND parent);
                     ChangeRecordingFolder(hWnd);
+                    return 0;
+                }
+            }
+
+            // Check Settings button click (pinned to right)
+            {
+                int btnW = 28;
+                int bY = (panelH - btnW) / 2;
+                RECT rect; GetClientRect(hWnd, &rect);
+                if (x >= rect.right - btnW - margin && x <= rect.right - margin && y >= bY && y <= bY + btnW) {
+                    if (hMainWnd) {
+                        ShowWindow(hMainWnd, SW_RESTORE);
+                        SetForegroundWindow(hMainWnd);
+                    }
                     return 0;
                 }
             }
