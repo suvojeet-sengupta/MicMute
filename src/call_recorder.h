@@ -63,7 +63,7 @@ private:
     void OnSilenceTimeout();
     
     std::string CreateDateFolder();
-    std::string GetNextFileName();
+    std::string GetNextFileName(int count);
     void SaveCurrentRecording();
     void CreateMetadataFile(const std::string& audioPath, time_t startTime, time_t endTime);
 

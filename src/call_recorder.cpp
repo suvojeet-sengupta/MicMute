@@ -249,10 +249,9 @@ std::string CallAutoRecorder::CreateDateFolder() {
     return dateFolder;
 }
 
-std::string CallAutoRecorder::GetNextFileName() {
-    todayCallCount++;
+std::string CallAutoRecorder::GetNextFileName(int count) {
     std::ostringstream oss;
-    oss << "call_" << std::setfill('0') << std::setw(3) << todayCallCount 
+    oss << "call_" << std::setfill('0') << std::setw(3) << count 
         << "_" << GetTimestampString() << ".wav";
     return oss.str();
 }
@@ -266,7 +265,8 @@ void CallAutoRecorder::SaveCurrentRecording() {
     std::string folder = CreateDateFolder();
     if (folder.empty()) return;
     
-    std::string filename = GetNextFileName();
+    // Use the next number for the filename
+    std::string filename = GetNextFileName(todayCallCount + 1);
     
     time_t endTime = std::time(nullptr);
     
@@ -274,6 +274,9 @@ void CallAutoRecorder::SaveCurrentRecording() {
     std::string savedPath = pRecorder->FinalizeStreaming(filename);
     
     if (!savedPath.empty()) {
+        // Only now that the file exists on disk, we sync the count
+        todayCallCount = CountRecordings(folder);
+        
         CreateMetadataFile(savedPath, recordingStartTime, endTime);
         // Notify recorder window about saved file
         NotifyAutoRecordSaved(filename);
