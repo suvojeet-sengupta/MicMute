@@ -10,6 +10,7 @@
 // Control Panel Window
 void CreateControlPanel(HINSTANCE hInstance);
 void UpdateControlPanel();
+void SetControlPanelSavedStatus(const std::string& filename);
 void LayoutControlPanel(HWND hWnd);
 LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 

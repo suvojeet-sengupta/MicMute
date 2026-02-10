@@ -7,6 +7,7 @@
 #include "call_recorder.h"
 #include "http_server.h"
 #include "ui_controls.h"
+#include "WasapiRecorder.h"
 #include <dwmapi.h>
 #include <cmath>
 #include <cstdio>
@@ -257,6 +258,12 @@ void UpdateControlPanel() {
     }
 }
 
+void SetControlPanelSavedStatus(const std::string& filename) {
+    cpLastSavedFile = filename;
+    cpSavedNotifyTime = GetTickCount();
+    UpdateControlPanel();
+}
+
 LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_ERASEBKGND:
@@ -363,16 +370,35 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     int pulse = 180 + (cpAnimFrame * 25);
                     SetTextColor(mem, RGB(pulse, 55, 55));
                     const char* dots[] = {"●  ", " ● ", "  ●"};
-                    std::string msg = std::string(dots[cpAnimFrame]) + " Auto Rec...";
+                    
+                    DWORD ms = g_CallRecorder->GetRecordingDuration();
+                    int seconds = (ms / 1000) % 60;
+                    int minutes = (ms / 1000) / 60;
+                    char timeBuf[32];
+                    sprintf_s(timeBuf, "Rec %02d:%02d", minutes, seconds);
+                    
+                    std::string msg = std::string(dots[cpAnimFrame]) + timeBuf;
                     DrawText(mem, msg.c_str(), -1, &statusRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
                 }
                 else if (IsManualRecording()) {
-                    if (IsManualPaused()) {
+                    if (IsManualPaused()) { // Fix for manual timer if needed later
                         SetTextColor(mem, RGB(255, 200, 0));
                         DrawText(mem, "⏸ Paused", -1, &statusRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
                     } else {
                         SetTextColor(mem, RGB(255, 70, 70));
-                        DrawText(mem, "● Recording...", -1, &statusRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                        
+                        // Get manual duration
+                        WasapiRecorder* pRec = GetManualRecorder();
+                        int totalSec = 0; 
+                        if (pRec) totalSec = (int)pRec->GetDurationSeconds();
+                        
+                        int minutes = totalSec / 60;
+                        int seconds = totalSec % 60;
+                        char timeBuf[32];
+                        sprintf_s(timeBuf, "Rec %02d:%02d", minutes, seconds);
+                        
+                        std::string msg = "● " + std::string(timeBuf);
+                        DrawText(mem, msg.c_str(), -1, &statusRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT); 
                     }
                 }
                 else if (g_CallRecorder && g_CallRecorder->IsEnabled()) {

@@ -43,6 +43,12 @@ public:
     int GetTodayCallCount() const { return todayCallCount; }
     std::string GetCurrentDateFolder() const;
 
+    // Duration in milliseconds
+    DWORD GetRecordingDuration() const {
+        if (currentState != State::RECORDING) return 0;
+        return GetTickCount() - recordingStartTick;
+    }
+
     // Configuration
     void SetVoiceThreshold(float threshold) { voiceThreshold = threshold; }
     float GetVoiceThreshold() const { return voiceThreshold; }

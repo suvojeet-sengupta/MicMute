@@ -96,6 +96,10 @@ void NotifyAutoRecordSaved(const std::string& filename) {
     if (hRecorderWnd) {
         InvalidateRect(hRecorderWnd, nullptr, FALSE);
     }
+    
+    // Also notify the control panel
+    extern void SetControlPanelSavedStatus(const std::string& filename);
+    SetControlPanelSavedStatus(filename);
 }
 
 // Helpers
