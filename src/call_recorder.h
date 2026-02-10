@@ -6,6 +6,7 @@
 #include <string>
 #include <atomic>
 #include <ctime>
+#include <map>
 
 // Forward declaration
 class WasapiRecorder;
@@ -35,8 +36,6 @@ public:
     // Get current state
     State GetState() const { return currentState; }
     
-#include <map>
-
     // Force start/stop from external source (HTTP server)
     void ForceStartRecording(const std::map<std::string, std::string>& metadata = {});
     void ForceStopRecording(const std::map<std::string, std::string>& metadata = {});
