@@ -45,15 +45,15 @@ extern void HandleManualStop(HWND parent);
 void GetPanelDimensions(int mode, float scale, int* outW, int* outH) {
     switch (mode) {
         case 0: // Compact
-            *outW = (int)(420 * scale);
+            *outW = (int)(460 * scale);
             *outH = (int)(56 * scale);
             break;
         case 2: // Wide
-            *outW = (int)(680 * scale);
+            *outW = (int)(720 * scale);
             *outH = (int)(72 * scale);
             break;
         default: // Normal
-            *outW = (int)(560 * scale);
+            *outW = (int)(600 * scale);
             *outH = (int)(64 * scale);
             break;
     }
@@ -524,10 +524,18 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 
             // === Section 6: Settings Button ===
             {
+                // Separator before Settings
+                HPEN sepPen = CreatePen(PS_SOLID, 1, colorPanelBorder);
+                SelectObject(mem, sepPen);
+                MoveToEx(mem, drawX, 6, nullptr);
+                LineTo(mem, drawX, panelH - 6);
+                DeleteObject(sepPen);
+                drawX += margin;
+
                 int btnW = 28;
                 int btnH = 28;
                 int bY = (panelH - btnH) / 2;
-                RECT rc = {rect.right - btnW - margin, bY, rect.right - margin, bY + btnH};
+                RECT rc = {drawX, bY, drawX + btnW, bY + btnH};
 
                 HBRUSH br = CreateSolidBrush(RGB(45, 45, 60));
                 FillRect(mem, &rc, br);
@@ -557,6 +565,8 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 
                 SelectObject(mem, GetStockObject(BLACK_PEN));
                 DeleteObject(gearPen);
+
+                drawX += btnW + margin;
             }
 
             // Blit
@@ -630,20 +640,33 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     ChangeRecordingFolder(hWnd);
                     return 0;
                 }
+                drawX += btnW + margin; // Folder width
+                
+                // Separator
+                drawX += margin;
             }
 
-            // Check Settings button click (pinned to right)
+            // Check Call Stats (skip)
+            if (showCallStats) {
+                drawX += 100 + margin;
+            }
+
+            // Check Settings button click (Flow based)
             {
+                // Separator
+                drawX += margin;
+
                 int btnW = 28;
                 int bY = (panelH - btnW) / 2;
-                RECT rect; GetClientRect(hWnd, &rect);
-                if (x >= rect.right - btnW - margin && x <= rect.right - margin && y >= bY && y <= bY + btnW) {
+                
+                if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
                     if (hMainWnd) {
                         ShowWindow(hMainWnd, SW_RESTORE);
                         SetForegroundWindow(hMainWnd);
                     }
                     return 0;
                 }
+                drawX += btnW + margin;
             }
 
             // Fallthrough: start dragging
