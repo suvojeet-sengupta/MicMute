@@ -1,6 +1,6 @@
-#include "settings.h"
-#include "globals.h"
-#include "control_panel.h"
+#include "core/settings.h"
+#include "core/globals.h"
+#include "ui/control_panel.h"
 #include <cstdio>
 
 void SaveOverlayPosition() {

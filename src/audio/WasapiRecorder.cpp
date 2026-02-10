@@ -1,6 +1,6 @@
-#include "WasapiRecorder.h"
-#include "StreamingWavWriter.h"
-#include "recorder.h" // For hRecorderWnd and WM_APP_RECORDING_ERROR
+#include "audio/WasapiRecorder.h"
+#include "audio/StreamingWavWriter.h"
+#include "audio/recorder.h" // For hRecorderWnd and WM_APP_RECORDING_ERROR
 #include <fstream>
 #include <iostream>
 #include <mmreg.h>

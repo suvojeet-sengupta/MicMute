@@ -1,4 +1,4 @@
-#include "globals.h"
+#include "core/globals.h"
 
 // Variables
 NOTIFYICONDATA nid;

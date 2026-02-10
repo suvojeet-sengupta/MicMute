@@ -1,8 +1,8 @@
-#include "overlay.h"
-#include "globals.h"
-#include "settings.h"
-#include "audio.h"
-#include "ui.h"
+#include "ui/overlay.h"
+#include "core/globals.h"
+#include "core/settings.h"
+#include "audio/audio.h"
+#include "ui/ui.h"
 #include <dwmapi.h>
 #include <cmath> // for abs, log10f
 #include <cstdio>

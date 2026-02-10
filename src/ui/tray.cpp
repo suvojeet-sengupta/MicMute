@@ -1,6 +1,6 @@
-#include "tray.h"
-#include "globals.h"
-#include "resource.h"
+#include "ui/tray.h"
+#include "core/globals.h"
+#include "core/resource.h"
 #include <shellapi.h>
 #include <cstdio> // strcpy_s
 

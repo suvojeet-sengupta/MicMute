@@ -1,9 +1,9 @@
-#include "call_recorder.h"
-#include "WasapiRecorder.h"
-#include "recorder.h"
-#include "http_server.h"
-#include "globals.h"
-#include "audio.h"
+#include "audio/call_recorder.h"
+#include "audio/WasapiRecorder.h"
+#include "audio/recorder.h"
+#include "network/http_server.h"
+#include "core/globals.h"
+#include "audio/audio.h"
 #include <shlobj.h>
 #include <fstream>
 #include <sstream>

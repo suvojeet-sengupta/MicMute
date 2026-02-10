@@ -18,11 +18,12 @@ if %errorlevel% neq 0 (
 )
 
 echo Compiling C++ Application...
-cl.exe /nologo /O2 /EHsc /std:c++23 /D "NDEBUG" /D "_WINDOWS" /W3 /Fe"build\Release\MicMute-S.exe" ^
-    src\main.cpp src\audio.cpp src\globals.cpp src\settings.cpp src\tray.cpp ^
-    src\overlay.cpp src\ui.cpp src\recorder.cpp src\WasapiRecorder.cpp ^
-    src\StreamingWavWriter.cpp src\ui_controls.cpp src\call_recorder.cpp ^
-    src\http_server.cpp src\control_panel.cpp ^
+cl.exe /nologo /O2 /EHsc /std:c++23 /D "NDEBUG" /D "_WINDOWS" /W3 /I src /Fe"build\Release\MicMute-S.exe" ^
+    src\core\main.cpp src\core\globals.cpp src\core\settings.cpp ^
+    src\audio\audio.cpp src\ui\tray.cpp src\ui\overlay.cpp src\ui\ui.cpp ^
+    src\audio\recorder.cpp src\audio\WasapiRecorder.cpp src\audio\StreamingWavWriter.cpp ^
+    src\ui\ui_controls.cpp src\audio\call_recorder.cpp ^
+    src\network\http_server.cpp src\ui\control_panel.cpp ^
     resources\app.res ^
     user32.lib gdi32.lib shell32.lib ole32.lib uuid.lib Mmdevapi.lib advapi32.lib dwmapi.lib ws2_32.lib Winhttp.lib
 

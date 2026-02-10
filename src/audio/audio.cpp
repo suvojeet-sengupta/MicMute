@@ -1,5 +1,5 @@
-#include "audio.h"
-#include "resource.h"
+#include "audio/audio.h"
+#include "core/resource.h"
 #include <iostream>
 #include <windows.h>
 #include <stdio.h>

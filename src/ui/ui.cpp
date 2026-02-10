@@ -1,10 +1,10 @@
-#include "ui.h"
-#include "globals.h"
-#include "settings.h"
-#include "audio.h"
-#include "tray.h"
-#include "overlay.h"
-#include "resource.h"
+#include "ui/ui.h"
+#include "core/globals.h"
+#include "core/settings.h"
+#include "audio/audio.h"
+#include "ui/tray.h"
+#include "ui/overlay.h"
+#include "core/resource.h"
 #include <dwmapi.h>
 
 void UpdateUIState() {

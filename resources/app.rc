@@ -1,4 +1,4 @@
-#include "../src/resource.h"
+#include "../src/core/resource.h"
 
 IDI_APP_ICON ICON "app.ico"
 IDI_MIC_ON   ICON "mic_on.ico"

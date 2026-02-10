@@ -1,6 +1,6 @@
-#include "ui_controls.h"
-#include "globals.h"
-#include "resource.h"
+#include "ui/ui_controls.h"
+#include "core/globals.h"
+#include "core/resource.h"
 
 void DrawRoundedRect(HDC hdc, RECT rc, int radius, COLORREF color) {
     HBRUSH hBrush = CreateSolidBrush(color);

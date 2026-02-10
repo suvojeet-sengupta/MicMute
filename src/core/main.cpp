@@ -2,7 +2,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
-#include "http_server.h"
+#include "network/http_server.h"
 #include <windows.h>
 #include <shellapi.h>
 #include <dwmapi.h>
@@ -13,17 +13,17 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
-#include "resource.h"
-#include "globals.h"
-#include "settings.h"
-#include "audio.h"
-#include "tray.h"
-#include "overlay.h"
-#include "ui.h"
-#include "recorder.h"
-#include "call_recorder.h"
-#include "ui_controls.h"
-#include "control_panel.h"
+#include "core/resource.h"
+#include "core/globals.h"
+#include "core/settings.h"
+#include "audio/audio.h"
+#include "ui/tray.h"
+#include "ui/overlay.h"
+#include "ui/ui.h"
+#include "audio/recorder.h"
+#include "audio/call_recorder.h"
+#include "ui/ui_controls.h"
+#include "ui/control_panel.h"
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20

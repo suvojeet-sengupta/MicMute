@@ -1,6 +1,6 @@
-#include "http_server.h"
-#include "call_recorder.h"
-#include "recorder.h"
+#include "network/http_server.h"
+#include "audio/call_recorder.h"
+#include "audio/recorder.h"
 #include <ws2tcpip.h>
 #include <thread>
 #include <atomic>
