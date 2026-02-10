@@ -82,14 +82,36 @@ jobs:
           - `MicMute-S.exe` - Portable executable
           - `MicMute-Ozonetel-Extension.zip` - Chrome Extension for Ozonetel integration
 
-          ### 🔌 Ozonetel Extension Setup Guide
-          1. **Download** the `MicMute-Ozonetel-Extension.zip` file from the assets below.
-          2. **Extract** the contents of the ZIP file to a folder on your computer.
-          3. Open **Chrome** or **Edge** and navigate to `chrome://extensions` or `edge://extensions`.
-          4. Enable **Developer mode** using the toggle switch in the top-right corner.
-          5. Click the **Load unpacked** button (usually top-left).
-          6. Select the **folder** where you extracted the extension files.
-          7. The extension is now installed! Ensure MicMute-S is running for the integration to work.
+          ### 🚀 Quick Start Guide
+
+          #### 1. Installation & Setup
+          - **Install:** Run `MicMute-S-Setup.exe` and follow the on-screen instructions.
+          - **Launch:** The application starts automatically in the system tray (look for the microphone icon).
+          - **Startup:** By default, MicMute-S will ask to run on Windows Startup. We recommend selecting **Yes** for continuous protection.
+
+          #### 2. Usage
+          - **Toggle Mute:** 
+            - **Left-Click** the system tray icon.
+            - **Right-Click** the tray icon -> **Open Settings** to use the large Mute button in the Control Panel.
+          - **Visual Feedback:** 
+            - 🟢 **Green Icon:** Microphone is Live.
+            - 🔴 **Red Icon:** Microphone is Muted.
+            - **Voice Meter:** Visualizes your microphone input level in real-time (can be toggled in settings).
+
+          #### 3. Ozonetel Integration (Optional)
+          To enable automatic call recording and CRM integration:
+          1. **Download** `MicMute-Ozonetel-Extension.zip` from the assets below.
+          2. **Extract** the contents to a folder.
+          3. Open **Chrome/Edge** and go to `chrome://extensions`.
+          4. Enable **Developer Mode** (top right).
+          5. Click **Load Unpacked** and select the extracted folder.
+          6. Ensure **"Auto record calls"** is checked in the MicMute-S Control Panel.
+
+          #### 4. Customization
+          - Open the **Control Panel** (Right-click Tray -> Open Settings).
+          - **General Tab:** Toggle startup, overlay, voice meter, and notifications.
+          - **Hide/Unhide Tab:** Customize which widgets appear on your dashboard.
+          - **Shape & Size:** Switch between Compact, Normal, and Wide layouts to fit your workflow.
         files: |
           installer/MicMute-S-Setup.exe
           build/Release/MicMute-S.exe
