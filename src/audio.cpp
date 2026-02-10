@@ -14,9 +14,6 @@
 // Link against required libs
 #pragma comment(lib, "ole32.lib")
 
-// Link against required libs
-#pragma comment(lib, "ole32.lib")
-
 // ==========================================
 // Utils: Registry Helpers
 // ==========================================

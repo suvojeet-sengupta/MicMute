@@ -33,7 +33,6 @@ bool StreamingWavWriter::Start(const std::string& outputFolder, int sampleRate, 
     m_bitsPerSample = bitsPerSample;
     m_blockAlign = channels * bitsPerSample / 8;
     m_byteRate = sampleRate * m_blockAlign;
-    m_byteRate = sampleRate * m_blockAlign;
     m_totalBytesWritten = 0;
     m_lastFlushTime = GetTickCount();
 

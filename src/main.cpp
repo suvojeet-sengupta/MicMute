@@ -89,7 +89,6 @@ void UpdateControlVisibility() {
     ShowWindow(hMeterCheck, showGeneral);
     ShowWindow(hRecorderCheck, showGeneral);
     ShowWindow(hNotifyCheck, showGeneral);
-    ShowWindow(hNotifyCheck, showGeneral);
     ShowWindow(hAutoRecordCheck, showGeneral);
     if (hBeepCheck) ShowWindow(hBeepCheck, showGeneral);
     
