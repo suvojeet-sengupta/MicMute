@@ -78,6 +78,7 @@ void DrawToggle(LPDRAWITEMSTRUCT lpDrawItem) {
     else if (id == ID_SHOW_RECORDER) isChecked = showRecorder;
     else if (id == ID_SHOW_NOTIFICATIONS) isChecked = showNotifications;
     else if (id == ID_AUTO_RECORD_CALLS) isChecked = autoRecordCalls;
+    else if (id == ID_BEEP_ON_CALL) isChecked = beepOnCall;
     else if (id == ID_HIDE_MUTE_BTN) isChecked = showMuteBtn;
     else if (id == ID_HIDE_VOICE_METER) isChecked = showVoiceMeter;
     else if (id == ID_HIDE_REC_STATUS) isChecked = showRecStatus;
