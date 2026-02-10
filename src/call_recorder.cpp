@@ -49,6 +49,27 @@ static bool CreateDirectoryIfNeeded(const std::string& path) {
     return CreateDirectoryA(path.c_str(), nullptr) != 0;
 }
 
+// Helper: Count .wav files in a directory
+static int CountRecordings(const std::string& folderPath) {
+    if (folderPath.empty()) return 0;
+    
+    std::string searchPath = folderPath + "\\*.wav";
+    WIN32_FIND_DATA findData;
+    HANDLE hFind = FindFirstFile(searchPath.c_str(), &findData);
+    
+    if (hFind == INVALID_HANDLE_VALUE) return 0;
+    
+    int count = 0;
+    do {
+        if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            count++;
+        }
+    } while (FindNextFile(hFind, &findData));
+    
+    FindClose(hFind);
+    return count;
+}
+
 CallAutoRecorder::CallAutoRecorder()
     : enabled(false)
     , currentState(State::IDLE)
@@ -79,7 +100,10 @@ void CallAutoRecorder::Enable() {
     
     // Reset date tracking
     currentDate = GetCurrentDateString();
-    todayCallCount = 0;
+    
+    // Scan existing recordings for today
+    std::string folder = GetCurrentDateFolder();
+    todayCallCount = CountRecordings(folder);
     
     enabled = true;
     currentState = State::DETECTING;
@@ -109,7 +133,9 @@ void CallAutoRecorder::Poll() {
     std::string today = GetCurrentDateString();
     if (today != currentDate) {
         currentDate = today;
-        todayCallCount = 0;
+        // Date changed, reset count by scanning new folder (likely 0, but good to be safe)
+        std::string folder = GetCurrentDateFolder();
+        todayCallCount = CountRecordings(folder);
     }
 
     // Safety: If extension disconnects (tab closed) while recording, save immediately
