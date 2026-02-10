@@ -93,7 +93,7 @@ private:
     
     // Common output format for mixing
     static const int OUTPUT_SAMPLE_RATE = 48000;
-    static const int OUTPUT_CHANNELS = 2;    // Stereo
+    static const int OUTPUT_CHANNELS = 1;    // Mono
     static const int OUTPUT_BITS = 16;
 };
 

@@ -481,8 +481,8 @@ std::vector<BYTE> WasapiRecorder::MixBuffers() {
         micSampleRate, micFrames, loopSampleRate, loopFrames, outputSampleRate, outputFrames);
     OutputDebugStringA(debugBuf);
     
-    // Output: 16-bit stereo
-    output.resize(outputFrames * 4); // 2 channels * 2 bytes per sample
+    // Output: 16-bit mono
+    output.resize(outputFrames * 2); // 1 channel * 2 bytes per sample
     short* outPtr = (short*)output.data();
     
     for (size_t i = 0; i < outputFrames; i++) {
@@ -503,9 +503,14 @@ std::vector<BYTE> WasapiRecorder::MixBuffers() {
             loopSample = InterpolateSample(loopbackBuffer, loopPos, pwfxLoopback, loopIsFloat);
         }
         
-        // Stereo output: Mic (Advisor) = Left, Loopback (CX) = Right
-        outPtr[i * 2] = FloatToShort(micSample);      // Left = Advisor
-        outPtr[i * 2 + 1] = FloatToShort(loopSample); // Right = CX
+        // Mono output: Mix Mic + Loopback
+        float mixedSample = micSample + loopSample;
+        
+        // Clamp to prevent clipping
+        if (mixedSample > 1.0f) mixedSample = 1.0f;
+        if (mixedSample < -1.0f) mixedSample = -1.0f;
+        
+        outPtr[i] = FloatToShort(mixedSample);
     }
     
     return output;
@@ -636,8 +641,8 @@ void WasapiRecorder::MixAndWriteChunk() {
     size_t outputFrames = (size_t)(maxDuration * outputSampleRate);
     if (outputFrames == 0) return;
     
-    // Create output buffer (16-bit stereo)
-    std::vector<BYTE> output(outputFrames * 4);
+    // Create output buffer (16-bit mono)
+    std::vector<BYTE> output(outputFrames * 2);
     short* outPtr = (short*)output.data();
     
     // Helper lambda for getting samples (simplified interpolation)
@@ -674,15 +679,20 @@ void WasapiRecorder::MixAndWriteChunk() {
             loopSample = getSample(loopCopy, loopFrame, pwfxLoopback, loopIsFloat);
         }
         
-        // Stereo output: Mic (Advisor) = Left, Loopback (CX) = Right
+        // Mono output: Mix Mic + Loopback
+        float mixedSample = micSample + loopSample;
+        
+        // Clamp
+        if (mixedSample > 1.0f) mixedSample = 1.0f;
+        if (mixedSample < -1.0f) mixedSample = -1.0f;
+        
         auto toShort = [](float s) -> short {
             s = s * 32767.0f;
             if (s > 32767.0f) s = 32767.0f;
             if (s < -32768.0f) s = -32768.0f;
             return (short)s;
         };
-        outPtr[i * 2] = toShort(micSample);      // Left = Advisor
-        outPtr[i * 2 + 1] = toShort(loopSample); // Right = CX
+        outPtr[i] = toShort(mixedSample);
     }
     
     // Write to disk
