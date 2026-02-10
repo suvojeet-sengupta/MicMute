@@ -22,7 +22,7 @@ cl.exe /nologo /O2 /EHsc /std:c++latest /D "NDEBUG" /D "_WINDOWS" /W3 /Fe"build\
     src\main.cpp src\audio.cpp src\globals.cpp src\settings.cpp src\tray.cpp ^
     src\overlay.cpp src\ui.cpp src\recorder.cpp src\WasapiRecorder.cpp ^
     src\StreamingWavWriter.cpp src\ui_controls.cpp src\call_recorder.cpp ^
-    src\http_server.cpp ^
+    src\http_server.cpp src\control_panel.cpp ^
     resources\app.res ^
     user32.lib gdi32.lib shell32.lib ole32.lib uuid.lib Mmdevapi.lib advapi32.lib dwmapi.lib ws2_32.lib Winhttp.lib
 

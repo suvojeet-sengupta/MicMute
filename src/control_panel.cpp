@@ -1,0 +1,579 @@
+#include "control_panel.h"
+#include "globals.h"
+#include "settings.h"
+#include "audio.h"
+#include "ui.h"
+#include "recorder.h"
+#include "call_recorder.h"
+#include "http_server.h"
+#include "ui_controls.h"
+#include <dwmapi.h>
+#include <cmath>
+#include <cstdio>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
+#include <string>
+
+#pragma comment(lib, "dwmapi.lib")
+
+// Local button IDs
+#define CPANEL_BTN_MUTE       3001
+#define CPANEL_BTN_REC_START  3002
+#define CPANEL_BTN_REC_STOP   3003
+
+// Animation state
+static int cpAnimFrame = 0;
+static bool cpDragging = false;
+static POINT cpDragStart = {0, 0};
+static POINT cpClickStart = {0, 0};
+
+// Notification for saved recordings
+static std::string cpLastSavedFile;
+static DWORD cpSavedNotifyTime = 0;
+static const DWORD SAVED_NOTIFY_MS = 3000;
+
+// External functions from recorder.cpp
+extern WasapiRecorder* GetManualRecorder();
+extern bool IsManualRecording();
+extern bool IsManualPaused();
+extern void HandleManualStartPause(HWND parent);
+extern void HandleManualStop(HWND parent);
+
+void GetPanelDimensions(int mode, float scale, int* outW, int* outH) {
+    switch (mode) {
+        case 0: // Compact
+            *outW = (int)(420 * scale);
+            *outH = (int)(56 * scale);
+            break;
+        case 2: // Wide
+            *outW = (int)(680 * scale);
+            *outH = (int)(72 * scale);
+            break;
+        default: // Normal
+            *outW = (int)(560 * scale);
+            *outH = (int)(64 * scale);
+            break;
+    }
+}
+
+void SaveControlPanelPosition() {
+    if (!hControlPanel) return;
+    RECT rect; GetWindowRect(hControlPanel, &rect);
+    HKEY hKey;
+    if (RegCreateKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+        RegSetValueEx(hKey, "PanelX", 0, REG_DWORD, (BYTE*)&rect.left, sizeof(DWORD));
+        RegSetValueEx(hKey, "PanelY", 0, REG_DWORD, (BYTE*)&rect.top, sizeof(DWORD));
+        RegCloseKey(hKey);
+    }
+}
+
+void LoadControlPanelPosition(int* x, int* y, int* w, int* h) {
+    float scale = GetWindowScale(nullptr);
+    GetPanelDimensions(panelSizeMode, scale, w, h);
+
+    int screenW = GetSystemMetrics(SM_CXSCREEN);
+    int screenH = GetSystemMetrics(SM_CYSCREEN);
+    *x = (screenW - *w) / 2;
+    *y = screenH - *h - 80;
+
+    HKEY hKey;
+    if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+        DWORD size = sizeof(DWORD);
+        int savedX = *x, savedY = *y;
+        RegQueryValueEx(hKey, "PanelX", nullptr, nullptr, (BYTE*)&savedX, &size);
+        RegQueryValueEx(hKey, "PanelY", nullptr, nullptr, (BYTE*)&savedY, &size);
+        RegCloseKey(hKey);
+
+        int virtLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        int virtTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        int virtRight = virtLeft + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int virtBottom = virtTop + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+        if (savedX >= virtLeft && savedX < virtRight - 50 &&
+            savedY >= virtTop && savedY < virtBottom - 50) {
+            *x = savedX;
+            *y = savedY;
+        }
+    }
+}
+
+// Draw the circular mute toggle button
+static void DrawMuteButton(HDC hdc, RECT area, bool isMuted) {
+    int cx = (area.left + area.right) / 2;
+    int cy = (area.top + area.bottom) / 2;
+    int radius = min(area.right - area.left, area.bottom - area.top) / 2 - 4;
+
+    // Outer glow ring
+    COLORREF glowColor = isMuted ? RGB(255, 50, 50) : RGB(50, 220, 80);
+    HPEN glowPen = CreatePen(PS_SOLID, 2, glowColor);
+    HPEN oldPen = (HPEN)SelectObject(hdc, glowPen);
+    HBRUSH oldBr = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    Ellipse(hdc, cx - radius - 2, cy - radius - 2, cx + radius + 2, cy + radius + 2);
+    SelectObject(hdc, oldPen);
+    SelectObject(hdc, oldBr);
+    DeleteObject(glowPen);
+
+    // Filled circle
+    COLORREF fillColor = isMuted ? RGB(180, 30, 30) : RGB(30, 160, 60);
+    HBRUSH fillBr = CreateSolidBrush(fillColor);
+    HPEN borderPen = CreatePen(PS_SOLID, 1, glowColor);
+    SelectObject(hdc, fillBr);
+    SelectObject(hdc, borderPen);
+    Ellipse(hdc, cx - radius, cy - radius, cx + radius, cy + radius);
+    SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    SelectObject(hdc, GetStockObject(BLACK_PEN));
+    DeleteObject(fillBr);
+    DeleteObject(borderPen);
+
+    // Icon
+    HICON hIcon = isMuted ? hIconMicOff : hIconMicOn;
+    if (hIcon) {
+        int iconSize = radius;
+        DrawIconEx(hdc, cx - iconSize / 2, cy - iconSize / 2, hIcon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
+    } else {
+        // Fallback text
+        SetTextColor(hdc, RGB(255, 255, 255));
+        SelectObject(hdc, hFontBold);
+        const char* label = isMuted ? "M" : "L";
+        RECT tr = area;
+        DrawText(hdc, label, -1, &tr, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+    }
+}
+
+// Draw mini waveform inline
+static void DrawMiniWaveform(HDC hdc, RECT area, float* history, int histIndex, bool isMuted, 
+                              COLORREF colorLow, COLORREF colorHigh) {
+    int centerY = (area.top + area.bottom) / 2;
+    int height = area.bottom - area.top;
+    int maxHalf = height / 2 - 3;
+
+    // Center line
+    HPEN gridPen = CreatePen(PS_DOT, 1, RGB(40, 40, 55));
+    SelectObject(hdc, gridPen);
+    MoveToEx(hdc, area.left, centerY, nullptr);
+    LineTo(hdc, area.right, centerY);
+    DeleteObject(gridPen);
+
+    float stepX = (float)(area.right - area.left) / (float)(LEVEL_HISTORY_SIZE - 1);
+
+    for (int i = 0; i < (int)LEVEL_HISTORY_SIZE; i++) {
+        int bufIdx = (histIndex + i) % LEVEL_HISTORY_SIZE;
+        float raw = history[bufIdx];
+
+        float display = 0.0f;
+        float minDb = -48.0f;
+        if (raw > 0.0f) {
+            float db = 20.0f * log10f(raw);
+            if (db < minDb) db = minDb;
+            display = (db - minDb) / (0.0f - minDb);
+        }
+        if (display < 0.0f) display = 0.0f;
+        if (display > 1.0f) display = 1.0f;
+        if (isMuted) display = 0.0f;
+
+        int half = (int)(display * maxHalf);
+
+        int r = (int)(GetRValue(colorLow) + (GetRValue(colorHigh) - GetRValue(colorLow)) * display);
+        int g = (int)(GetGValue(colorLow) + (GetGValue(colorHigh) - GetGValue(colorLow)) * display);
+        int b = (int)(GetBValue(colorLow) + (GetBValue(colorHigh) - GetBValue(colorLow)) * display);
+        COLORREF col = isMuted ? RGB(35, 35, 45) : RGB(r, g, b);
+
+        HPEN lp = CreatePen(PS_SOLID, 1, col);
+        HPEN op = (HPEN)SelectObject(hdc, lp);
+        int x = area.left + (int)(i * stepX);
+        MoveToEx(hdc, x, centerY - half, nullptr);
+        LineTo(hdc, x, centerY + half);
+        SelectObject(hdc, op);
+        DeleteObject(lp);
+    }
+}
+
+// Get today's stats string
+static std::string GetCallStatsString() {
+    if (!g_CallRecorder) return "";
+
+    auto t = std::time(nullptr);
+    struct tm tm;
+    localtime_s(&tm, &t);
+    char dateBuf[32];
+    strftime(dateBuf, sizeof(dateBuf), "%d %b", &tm);
+
+    int count = g_CallRecorder->GetTodayCallCount();
+    char buf[64];
+    sprintf_s(buf, "%s: %d call%s", dateBuf, count, count == 1 ? "" : "s");
+    return std::string(buf);
+}
+
+void CreateControlPanel(HINSTANCE hInstance) {
+    int x, y, w, h;
+    LoadControlPanelPosition(&x, &y, &w, &h);
+
+    // Register window class
+    static bool registered = false;
+    if (!registered) {
+        WNDCLASSEX wc = {0};
+        wc.cbSize = sizeof(WNDCLASSEX);
+        wc.style = CS_HREDRAW | CS_VREDRAW;
+        wc.lpfnWndProc = ControlPanelWndProc;
+        wc.hInstance = hInstance;
+        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+        wc.lpszClassName = "MicMuteS_ControlPanel";
+        RegisterClassEx(&wc);
+        registered = true;
+    }
+
+    hControlPanel = CreateWindowEx(
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
+        "MicMuteS_ControlPanel", nullptr,
+        WS_POPUP | WS_CLIPCHILDREN,
+        x, y, w, h,
+        nullptr, nullptr, hInstance, nullptr
+    );
+
+    if (hControlPanel) {
+        SetLayeredWindowAttributes(hControlPanel, 0, 240, LWA_ALPHA);
+
+        // Rounded corners (Win11)
+        HMODULE hDwm = GetModuleHandle("dwmapi.dll");
+        if (hDwm) {
+            typedef HRESULT(WINAPI* DwmSetWindowAttributeFn)(HWND, DWORD, LPCVOID, DWORD);
+            auto pSetAttr = (DwmSetWindowAttributeFn)GetProcAddress(hDwm, "DwmSetWindowAttribute");
+            if (pSetAttr) {
+                int cornerPref = 2; // DWMWCP_ROUND
+                pSetAttr(hControlPanel, 33, &cornerPref, sizeof(cornerPref));
+            }
+        }
+
+        ShowWindow(hControlPanel, SW_SHOW);
+        UpdateWindow(hControlPanel);
+    }
+}
+
+void UpdateControlPanel() {
+    if (hControlPanel && IsWindowVisible(hControlPanel)) {
+        InvalidateRect(hControlPanel, nullptr, FALSE);
+    }
+}
+
+LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_ERASEBKGND:
+            return 1;
+
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hWnd, &ps);
+            RECT rect;
+            GetClientRect(hWnd, &rect);
+
+            // Double buffer
+            HDC mem = CreateCompatibleDC(hdc);
+            HBITMAP bmp = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
+            HBITMAP oldBmp = (HBITMAP)SelectObject(mem, bmp);
+
+            // Background
+            HBRUSH bgBr = CreateSolidBrush(colorPanelBg);
+            FillRect(mem, &rect, bgBr);
+            DeleteObject(bgBr);
+
+            // Border
+            HPEN borderPen = CreatePen(PS_SOLID, 1, colorPanelBorder);
+            SelectObject(mem, borderPen);
+            SelectObject(mem, GetStockObject(NULL_BRUSH));
+            RoundRect(mem, 0, 0, rect.right, rect.bottom, 16, 16);
+            DeleteObject(borderPen);
+
+            SetBkMode(mem, TRANSPARENT);
+
+            int margin = 8;
+            int drawX = margin;
+            int panelH = rect.bottom;
+            bool isMuted = IsDefaultMicMuted();
+
+            // === Section 1: Mute Button ===
+            if (showMuteBtn) {
+                int btnSize = panelH - margin * 2;
+                RECT muteArea = {drawX, margin, drawX + btnSize, panelH - margin};
+                DrawMuteButton(mem, muteArea, isMuted);
+                drawX += btnSize + margin;
+            }
+
+            // === Separator ===
+            if (showMuteBtn && (showVoiceMeter || showRecStatus || showManualRec || showCallStats)) {
+                HPEN sepPen = CreatePen(PS_SOLID, 1, colorPanelBorder);
+                SelectObject(mem, sepPen);
+                MoveToEx(mem, drawX, 6, nullptr);
+                LineTo(mem, drawX, panelH - 6);
+                DeleteObject(sepPen);
+                drawX += margin;
+            }
+
+            // === Section 2: Voice Meter ===
+            if (showVoiceMeter) {
+                int meterW = 120;
+                int halfH = (panelH - 4) / 2;
+
+                RECT micArea = {drawX, 2, drawX + meterW, halfH};
+                RECT spkArea = {drawX, halfH + 2, drawX + meterW, panelH - 2};
+
+                DrawMiniWaveform(mem, micArea, levelHistory.data(), levelHistoryIndex, isMuted,
+                                  RGB(0, 255, 0), RGB(255, 255, 0));
+                DrawMiniWaveform(mem, spkArea, speakerLevelHistory.data(), levelHistoryIndex, false,
+                                  RGB(0, 200, 255), RGB(0, 100, 255));
+
+                // Labels
+                SetTextColor(mem, RGB(120, 120, 140));
+                SelectObject(mem, hFontSmall);
+                RECT lblMic = {drawX + 2, 1, drawX + meterW, 14};
+                DrawText(mem, "MIC", -1, &lblMic, DT_LEFT | DT_TOP | DT_SINGLELINE);
+                RECT lblSpk = {drawX + 2, halfH + 1, drawX + meterW, halfH + 14};
+                DrawText(mem, "SPK", -1, &lblSpk, DT_LEFT | DT_TOP | DT_SINGLELINE);
+
+                drawX += meterW + margin;
+
+                // Separator
+                HPEN sepPen2 = CreatePen(PS_SOLID, 1, colorPanelBorder);
+                SelectObject(mem, sepPen2);
+                MoveToEx(mem, drawX, 6, nullptr);
+                LineTo(mem, drawX, panelH - 6);
+                DeleteObject(sepPen2);
+                drawX += margin;
+            }
+
+            // === Section 3: Recording Status ===
+            if (showRecStatus) {
+                int statusW = 140;
+                RECT statusRect = {drawX, 4, drawX + statusW, panelH - 4};
+
+                DWORD now = GetTickCount();
+                bool showingSaved = (cpSavedNotifyTime > 0 && (now - cpSavedNotifyTime) < SAVED_NOTIFY_MS);
+
+                SelectObject(mem, hFontSmall);
+
+                if (showingSaved) {
+                    SetTextColor(mem, RGB(100, 255, 120));
+                    std::string msg = "Saved: " + cpLastSavedFile;
+                    DrawText(mem, msg.c_str(), -1, &statusRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS);
+                }
+                else if (g_CallRecorder && g_CallRecorder->IsEnabled() &&
+                         g_CallRecorder->GetState() == CallAutoRecorder::State::RECORDING) {
+                    cpAnimFrame = (cpAnimFrame + 1) % 3;
+                    int pulse = 180 + (cpAnimFrame * 25);
+                    SetTextColor(mem, RGB(pulse, 55, 55));
+                    const char* dots[] = {"●  ", " ● ", "  ●"};
+                    std::string msg = std::string(dots[cpAnimFrame]) + " Auto Rec...";
+                    DrawText(mem, msg.c_str(), -1, &statusRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                }
+                else if (IsManualRecording()) {
+                    if (IsManualPaused()) {
+                        SetTextColor(mem, RGB(255, 200, 0));
+                        DrawText(mem, "⏸ Paused", -1, &statusRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                    } else {
+                        SetTextColor(mem, RGB(255, 70, 70));
+                        DrawText(mem, "● Recording...", -1, &statusRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                    }
+                }
+                else if (g_CallRecorder && g_CallRecorder->IsEnabled()) {
+                    if (IsExtensionConnected()) {
+                        SetTextColor(mem, RGB(100, 180, 255));
+                        DrawText(mem, "Auto: Ready", -1, &statusRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                    } else {
+                        SetTextColor(mem, RGB(255, 165, 60));
+                        DrawText(mem, "Waiting Ext...", -1, &statusRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                    }
+                } else {
+                    SetTextColor(mem, colorTextDim);
+                    DrawText(mem, "Idle", -1, &statusRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                }
+
+                drawX += statusW + margin;
+            }
+
+            // === Section 4: Manual Record Buttons ===
+            if (showManualRec) {
+                int btnW = 28;
+                int btnH = 28;
+                int bY = (panelH - btnH) / 2;
+
+                // Start/Pause button
+                {
+                    RECT rc = {drawX, bY, drawX + btnW, bY + btnH};
+                    bool recording = IsManualRecording();
+                    bool paused = IsManualPaused();
+
+                    HBRUSH br = CreateSolidBrush(RGB(45, 45, 60));
+                    FillRect(mem, &rc, br);
+                    DeleteObject(br);
+
+                    HBRUSH shapeBr = CreateSolidBrush(RGB(240, 240, 245));
+                    int cx = (rc.left + rc.right) / 2;
+                    int cy = (rc.top + rc.bottom) / 2;
+
+                    if (recording && !paused) {
+                        // Pause icon
+                        RECT r1 = {cx - 5, cy - 6, cx - 2, cy + 6};
+                        RECT r2 = {cx + 2, cy - 6, cx + 5, cy + 6};
+                        FillRect(mem, &r1, shapeBr);
+                        FillRect(mem, &r2, shapeBr);
+                    } else {
+                        // Play triangle
+                        POINT pts[3] = {{cx - 4, cy - 6}, {cx - 4, cy + 6}, {cx + 5, cy}};
+                        HRGN rgn = CreatePolygonRgn(pts, 3, WINDING);
+                        FillRgn(mem, rgn, shapeBr);
+                        DeleteObject(rgn);
+                    }
+                    DeleteObject(shapeBr);
+                    drawX += btnW + 4;
+                }
+
+                // Stop button
+                {
+                    RECT rc = {drawX, bY, drawX + btnW, bY + btnH};
+                    HBRUSH br = CreateSolidBrush(RGB(45, 45, 60));
+                    FillRect(mem, &rc, br);
+                    DeleteObject(br);
+
+                    int cx = (rc.left + rc.right) / 2;
+                    int cy = (rc.top + rc.bottom) / 2;
+                    RECT sq = {cx - 5, cy - 5, cx + 5, cy + 5};
+                    HBRUSH red = CreateSolidBrush(RGB(255, 70, 70));
+                    FillRect(mem, &sq, red);
+                    DeleteObject(red);
+                    drawX += btnW + margin;
+                }
+
+                // Separator
+                HPEN sepPen3 = CreatePen(PS_SOLID, 1, colorPanelBorder);
+                SelectObject(mem, sepPen3);
+                MoveToEx(mem, drawX, 6, nullptr);
+                LineTo(mem, drawX, panelH - 6);
+                DeleteObject(sepPen3);
+                drawX += margin;
+            }
+
+            // === Section 5: Call Stats ===
+            if (showCallStats) {
+                std::string stats = GetCallStatsString();
+                if (!stats.empty()) {
+                    // Stats badge
+                    int badgeW = 100;
+                    RECT badgeRect = {drawX, 4, drawX + badgeW, panelH - 4};
+
+                    // Badge background
+                    HBRUSH badgeBr = CreateSolidBrush(RGB(35, 35, 50));
+                    RECT badgeBg = {drawX, (panelH - 24) / 2, drawX + badgeW, (panelH + 24) / 2};
+                    FillRect(mem, &badgeBg, badgeBr);
+                    DeleteObject(badgeBr);
+
+                    SetTextColor(mem, colorAccent);
+                    SelectObject(mem, hFontSmall);
+                    DrawText(mem, stats.c_str(), -1, &badgeRect, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+                }
+            }
+
+            // Blit
+            BitBlt(hdc, 0, 0, rect.right, rect.bottom, mem, 0, 0, SRCCOPY);
+
+            SelectObject(mem, oldBmp);
+            DeleteObject(bmp);
+            DeleteDC(mem);
+
+            EndPaint(hWnd, &ps);
+            return 0;
+        }
+
+        case WM_LBUTTONDOWN: {
+            int x = LOWORD(lParam);
+            int y = HIWORD(lParam);
+            int panelH = 0;
+            {
+                RECT r; GetClientRect(hWnd, &r);
+                panelH = r.bottom;
+            }
+            int margin = 8;
+            int drawX = margin;
+            bool isMuted = IsDefaultMicMuted();
+
+            // Check mute button click
+            if (showMuteBtn) {
+                int btnSize = panelH - margin * 2;
+                if (x >= drawX && x <= drawX + btnSize && y >= margin && y <= panelH - margin) {
+                    ToggleMute();
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                    return 0;
+                }
+                drawX += btnSize + margin * 2;
+            }
+
+            // Check voice meter area (skip, just separator)
+            if (showVoiceMeter) {
+                drawX += 120 + margin * 2;
+            }
+
+            // Check recording status area (skip)
+            if (showRecStatus) {
+                drawX += 140 + margin;
+            }
+
+            // Check manual record buttons
+            if (showManualRec) {
+                int btnW = 28;
+                int bY = (panelH - btnW) / 2;
+
+                // Start/Pause
+                if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
+                    HandleManualStartPause(hWnd);
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                    return 0;
+                }
+                drawX += btnW + 4;
+
+                // Stop
+                if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
+                    HandleManualStop(hWnd);
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                    return 0;
+                }
+            }
+
+            // Fallthrough: start dragging
+            cpDragging = true;
+            SetCapture(hWnd);
+            GetCursorPos(&cpClickStart);
+            GetCursorPos(&cpDragStart);
+            {
+                RECT r; GetWindowRect(hWnd, &r);
+                cpDragStart.x -= r.left;
+                cpDragStart.y -= r.top;
+            }
+            return 0;
+        }
+
+        case WM_MOUSEMOVE:
+            if (cpDragging) {
+                POINT pt; GetCursorPos(&pt);
+                SetWindowPos(hWnd, nullptr, pt.x - cpDragStart.x, pt.y - cpDragStart.y,
+                             0, 0, SWP_NOSIZE | SWP_NOZORDER);
+            }
+            return 0;
+
+        case WM_LBUTTONUP:
+            if (cpDragging) {
+                cpDragging = false;
+                ReleaseCapture();
+                SaveControlPanelPosition();
+            }
+            return 0;
+
+        case WM_RBUTTONUP:
+            // Hide control panel
+            ShowWindow(hWnd, SW_HIDE);
+            return 0;
+
+        default:
+            return DefWindowProc(hWnd, msg, wParam, lParam);
+    }
+    return 0;
+}

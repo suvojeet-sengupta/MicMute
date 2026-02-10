@@ -18,6 +18,18 @@
 #define ID_TAB_CONTROL   1010
 #define ID_AUTO_RECORD_CALLS 1012
 
+// Hide/Unhide tab controls
+#define ID_HIDE_MUTE_BTN     1020
+#define ID_HIDE_VOICE_METER  1021
+#define ID_HIDE_REC_STATUS   1022
+#define ID_HIDE_CALL_STATS   1023
+#define ID_HIDE_MANUAL_REC   1024
+
+// Shape & Size tab controls
+#define ID_SIZE_COMPACT      1030
+#define ID_SIZE_NORMAL       1031
+#define ID_SIZE_WIDE         1032
+
 #define WM_TRAYICON (WM_USER + 1)
 #define WM_APP_MUTE_CHANGED (WM_APP + 100)
 

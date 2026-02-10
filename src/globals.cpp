@@ -5,21 +5,33 @@ NOTIFYICONDATA nid;
 HWND hMainWnd;
 HWND hOverlayWnd = nullptr;
 HWND hMeterWnd = nullptr;
+HWND hControlPanel = nullptr;
 
 bool isRunOnStartup = false;
 bool showOverlay = false;
 bool showMeter = false;
 bool showRecorder = false;
-bool showNotifications = true; // Default true
+bool showNotifications = true;
 std::string recordingFolder = "";
+std::string userName = "Suvojeet Sengupta";
 bool autoRecordCalls = false;
 
+// Control Panel visibility (all visible by default)
+bool showMuteBtn = true;
+bool showVoiceMeter = true;
+bool showRecStatus = true;
+bool showCallStats = true;
+bool showManualRec = true;
+
+// Panel size mode (0=Compact, 1=Normal, 2=Wide)
+int panelSizeMode = 1;
 
 HFONT hFontTitle;
 HFONT hFontStatus;
 HFONT hFontNormal;
 HFONT hFontSmall;
 HFONT hFontOverlay;
+HFONT hFontBold;
 
 DWORD lastToggleTime = 0;
 int skipTimerCycles = 0;
@@ -33,29 +45,31 @@ std::array<float, LEVEL_HISTORY_SIZE> levelHistory = {};
 std::array<float, LEVEL_HISTORY_SIZE> speakerLevelHistory = {};
 int levelHistoryIndex = 0;
 
-// Color Definitions
-// Color Definitions
-// Modern Dark Theme
-// Modern Dark Theme (Windows 11 Style)
-COLORREF colorBg = RGB(32, 32, 32);         // Fallback if Mica fails
-COLORREF colorSidebarBg = RGB(32, 32, 32);  // Transparent/Mica (Handled by DWM, this is fallback)
-COLORREF colorText = RGB(240, 240, 240);    // Primary Text (Off-white)
-COLORREF colorTextDim = RGB(160, 160, 160); // Secondary Text
-COLORREF colorMuted = RGB(255, 69, 58);     // System Red (Windows 11)
-COLORREF colorLive = RGB(50, 215, 75);      // System Green (Windows 11)
-COLORREF colorOverlayBgMuted = RGB(30, 0, 0); // Subtle Dark Red
-COLORREF colorOverlayBgLive = RGB(0, 30, 0);  // Subtle Dark Green
-COLORREF colorMeterBg = RGB(20, 20, 20);    // Dark for Meter
-COLORREF colorChroma = RGB(255, 0, 255);    // Magenta key
+// Refined Navy-Dark Theme
+COLORREF colorBg = RGB(24, 24, 32);
+COLORREF colorSidebarBg = RGB(20, 20, 28);
+COLORREF colorText = RGB(245, 245, 250);
+COLORREF colorTextDim = RGB(150, 150, 170);
+COLORREF colorMuted = RGB(255, 82, 82);
+COLORREF colorLive = RGB(76, 217, 100);
+COLORREF colorOverlayBgMuted = RGB(40, 12, 12);
+COLORREF colorOverlayBgLive = RGB(12, 40, 18);
+COLORREF colorMeterBg = RGB(16, 16, 24);
+COLORREF colorChroma = RGB(255, 0, 255);
 
 // Toggle Switch & Controls
-COLORREF colorToggleBgOff = RGB(60, 60, 60);
-COLORREF colorToggleBgOn = RGB(0, 120, 215);  // Windows Acccent Blue
+COLORREF colorToggleBgOff = RGB(55, 55, 70);
+COLORREF colorToggleBgOn = RGB(98, 130, 255);
 COLORREF colorToggleCircle = RGB(255, 255, 255);
 
 // Sidebar Interaction
-COLORREF colorSidebarHover = RGB(50, 50, 50);    // Subtle highlight
-COLORREF colorSidebarSelected = RGB(0, 120, 215); // Accent highlight
+COLORREF colorSidebarHover = RGB(38, 38, 50);
+COLORREF colorSidebarSelected = RGB(98, 130, 255);
+
+// New accent & panel
+COLORREF colorAccent = RGB(98, 130, 255);
+COLORREF colorPanelBg = RGB(22, 22, 30);
+COLORREF colorPanelBorder = RGB(50, 50, 70);
 
 HBRUSH hBrushBg;
 HBRUSH hBrushSidebarBg;
@@ -65,6 +79,7 @@ HBRUSH hBrushMeterBg;
 HBRUSH hBrushChroma;
 HBRUSH hBrushSidebarHover;
 HBRUSH hBrushSidebarSelected;
+HBRUSH hBrushPanelBg;
 
 bool isDragging = false;
 POINT dragStart;
@@ -73,14 +88,12 @@ bool isMeterDragging = false;
 POINT meterDragStart;
 
 float GetWindowScale(HWND hWnd) {
-    // Try GetDpiForWindow (Win 10 1607+)
     static auto pGetDpiForWindow = (UINT(WINAPI*)(HWND))GetProcAddress(GetModuleHandle("User32.dll"), "GetDpiForWindow");
     if (pGetDpiForWindow && hWnd) {
          UINT dpi = pGetDpiForWindow(hWnd);
          return dpi / 96.0f;
     }
     
-    // Fallback: System DPI
     HDC hdc = GetDC(nullptr);
     int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
     ReleaseDC(nullptr, hdc);

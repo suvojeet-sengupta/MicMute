@@ -1,6 +1,7 @@
 #include "settings.h"
 #include "globals.h"
-#include <cstdio> // For nullptr
+#include "control_panel.h"
+#include <cstdio>
 
 void SaveOverlayPosition() {
     if (!hOverlayWnd) return;
@@ -42,7 +43,7 @@ void SaveMeterPosition() {
 
 void LoadMeterPosition(int* x, int* y, int* w, int* h) {
     *x = 50; *y = 100;
-    *w = 180; *h = 100; // Defaults
+    *w = 180; *h = 100;
     
     HKEY hKey;
     if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
@@ -58,7 +59,9 @@ void LoadMeterPosition(int* x, int* y, int* w, int* h) {
 void SaveSettings() {
     HKEY hKey;
     if (RegCreateKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
-        DWORD val = showOverlay ? 1 : 0;
+        DWORD val;
+        
+        val = showOverlay ? 1 : 0;
         RegSetValueEx(hKey, "ShowOverlay", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
         val = showMeter ? 1 : 0;
         RegSetValueEx(hKey, "ShowMeter", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
@@ -69,16 +72,35 @@ void SaveSettings() {
         val = autoRecordCalls ? 1 : 0;
         RegSetValueEx(hKey, "AutoRecordCalls", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
         
+        // Control panel visibility toggles
+        val = showMuteBtn ? 1 : 0;
+        RegSetValueEx(hKey, "ShowMuteBtn", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+        val = showVoiceMeter ? 1 : 0;
+        RegSetValueEx(hKey, "ShowVoiceMeter", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+        val = showRecStatus ? 1 : 0;
+        RegSetValueEx(hKey, "ShowRecStatus", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+        val = showCallStats ? 1 : 0;
+        RegSetValueEx(hKey, "ShowCallStats", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+        val = showManualRec ? 1 : 0;
+        RegSetValueEx(hKey, "ShowManualRec", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+        
+        // Panel size mode
+        val = (DWORD)panelSizeMode;
+        RegSetValueEx(hKey, "PanelSizeMode", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+        
+        // User name
+        if (!userName.empty()) {
+            RegSetValueEx(hKey, "UserName", 0, REG_SZ, (const BYTE*)userName.c_str(), (DWORD)(userName.length() + 1));
+        }
+        
         if (!recordingFolder.empty()) {
             RegSetValueEx(hKey, "RecordingFolder", 0, REG_SZ, (const BYTE*)recordingFolder.c_str(), (DWORD)(recordingFolder.length() + 1));
         }
 
-        // Save Window Positions on global save
+        // Save window positions
         SaveOverlayPosition();
         SaveMeterPosition();
-        // Recorder position is handled in recorder.cpp, but we should ensure it's called
-        // We need a forward declaration or include, but for now relying on individual window saves is okay IF they are called.
-        // Better: Call them here if windows are valid, OR rely on WM_DESTROY/WM_ENDSESSION in main.cpp to call individual save functions.
+        SaveControlPanelPosition();
         
         RegCloseKey(hKey);
     }
@@ -89,6 +111,7 @@ void LoadSettings() {
     HKEY hKey;
     if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD), val = 0;
+        
         if (RegQueryValueEx(hKey, "ShowOverlay", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             showOverlay = val != 0;
         if (RegQueryValueEx(hKey, "ShowMeter", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
@@ -99,6 +122,31 @@ void LoadSettings() {
             showNotifications = val != 0;
         if (RegQueryValueEx(hKey, "AutoRecordCalls", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             autoRecordCalls = val != 0;
+        
+        // Control panel visibility toggles
+        size = sizeof(DWORD);
+        if (RegQueryValueEx(hKey, "ShowMuteBtn", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            showMuteBtn = val != 0;
+        if (RegQueryValueEx(hKey, "ShowVoiceMeter", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            showVoiceMeter = val != 0;
+        if (RegQueryValueEx(hKey, "ShowRecStatus", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            showRecStatus = val != 0;
+        if (RegQueryValueEx(hKey, "ShowCallStats", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            showCallStats = val != 0;
+        if (RegQueryValueEx(hKey, "ShowManualRec", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            showManualRec = val != 0;
+        
+        // Panel size mode
+        size = sizeof(DWORD);
+        if (RegQueryValueEx(hKey, "PanelSizeMode", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            panelSizeMode = (int)val;
+        
+        // User name
+        char nameBuf[256] = {0};
+        DWORD nameSize = sizeof(nameBuf);
+        if (RegQueryValueEx(hKey, "UserName", nullptr, nullptr, (BYTE*)nameBuf, &nameSize) == ERROR_SUCCESS) {
+            userName = nameBuf;
+        }
             
         char buffer[MAX_PATH] = {0};
         DWORD bufSize = sizeof(buffer);
@@ -119,7 +167,6 @@ void ManageStartup(bool enable) {
         if (enable) {
             char exe[MAX_PATH];
             GetModuleFileName(nullptr, exe, MAX_PATH);
-            // Robustness: Always update the path in case EXE moved
             RegSetValueEx(hKey, "MicMute-S", 0, REG_SZ, (BYTE*)exe, (DWORD)(strlen(exe) + 1));
         } else {
             RegDeleteValue(hKey, "MicMute-S");

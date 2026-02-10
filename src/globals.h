@@ -11,10 +11,12 @@
 
 // Global Variables
 extern std::string recordingFolder;
+extern std::string userName;
 extern NOTIFYICONDATA nid;
 extern HWND hMainWnd;
 extern HWND hOverlayWnd;
 extern HWND hMeterWnd;
+extern HWND hControlPanel;
 
 extern bool isRunOnStartup;
 extern bool showOverlay;
@@ -23,11 +25,22 @@ extern bool showRecorder;
 extern bool showNotifications;
 extern bool autoRecordCalls;
 
+// Control Panel visibility toggles
+extern bool showMuteBtn;
+extern bool showVoiceMeter;
+extern bool showRecStatus;
+extern bool showCallStats;
+extern bool showManualRec;
+
+// Control Panel size mode: 0=Compact, 1=Normal, 2=Wide
+extern int panelSizeMode;
+
 extern HFONT hFontTitle;
 extern HFONT hFontStatus;
 extern HFONT hFontNormal;
 extern HFONT hFontSmall;
 extern HFONT hFontOverlay;
+extern HFONT hFontBold;
 
 extern DWORD lastToggleTime;
 extern int skipTimerCycles;
@@ -45,7 +58,7 @@ extern std::array<float, LEVEL_HISTORY_SIZE> levelHistory;
 extern std::array<float, LEVEL_HISTORY_SIZE> speakerLevelHistory;
 extern int levelHistoryIndex;
 
-// Colors
+// Colors — Refined Navy-Dark Theme
 extern COLORREF colorBg;
 extern COLORREF colorSidebarBg; 
 extern COLORREF colorText;
@@ -61,6 +74,9 @@ extern COLORREF colorToggleBgOn;
 extern COLORREF colorToggleCircle;
 extern COLORREF colorSidebarHover;
 extern COLORREF colorSidebarSelected;
+extern COLORREF colorAccent;
+extern COLORREF colorPanelBg;
+extern COLORREF colorPanelBorder;
 
 extern HBRUSH hBrushBg;
 extern HBRUSH hBrushSidebarBg;
@@ -70,6 +86,7 @@ extern HBRUSH hBrushMeterBg;
 extern HBRUSH hBrushChroma;
 extern HBRUSH hBrushSidebarHover;
 extern HBRUSH hBrushSidebarSelected;
+extern HBRUSH hBrushPanelBg;
 
 // Dragging
 extern bool isDragging;

@@ -14,7 +14,6 @@ extern HWND hRecorderWnd;
 void CreateRecorderWindow(HINSTANCE hInstance);
 void ShowRecorderWindow(bool show);
 void InitRecorder();
-void InitRecorder();
 void CleanupRecorder();
 bool EnsureRecordingFolderSelected(HWND parent);
 
@@ -30,3 +29,10 @@ void NotifyAutoRecordSaved(const std::string& filename);
 // State Saving
 void SaveRecorderPosition();
 
+// Manual recording interface (used by control_panel.cpp)
+class WasapiRecorder;
+WasapiRecorder* GetManualRecorder();
+bool IsManualRecording();
+bool IsManualPaused();
+void HandleManualStartPause(HWND parent);
+void HandleManualStop(HWND parent);

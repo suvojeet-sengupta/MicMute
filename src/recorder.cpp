@@ -504,4 +504,62 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
     return 0;
 }
 
+// === Manual recording interface for control_panel.cpp ===
 
+WasapiRecorder* GetManualRecorder() {
+    return &recorder;
+}
+
+bool IsManualRecording() {
+    return recorder.IsRecording();
+}
+
+bool IsManualPaused() {
+    return recorder.IsPaused();
+}
+
+void HandleManualStartPause(HWND parent) {
+    if (!recorder.IsRecording()) {
+        if (!EnsureRecordingFolderSelected(parent)) return;
+        std::string dateFolder = GetDateFolderPath();
+        if (recorder.StartStreaming(dateFolder)) {
+            recordingStartTime = std::time(nullptr);
+        }
+    } else {
+        if (recorder.IsPaused()) recorder.Resume();
+        else recorder.Pause();
+    }
+    if (hRecorderWnd) UpdateRecorderUI(hRecorderWnd);
+}
+
+void HandleManualStop(HWND parent) {
+    if (!recorder.IsRecording()) return;
+
+    recorder.Stop();
+    time_t endTime = std::time(nullptr);
+
+    std::string timestamp = GetCurrentTimestampString();
+    std::string dateFolder = GetDateFolderPath();
+    std::string filename = "Recording_" + timestamp + ".wav";
+
+    std::string savedPath = recorder.FinalizeStreaming(filename);
+    if (!savedPath.empty()) {
+        std::string txtPath = dateFolder + "\\" + "Recording_" + timestamp + ".txt";
+        std::ofstream txtFile(txtPath);
+        if (txtFile.is_open()) {
+            struct tm tmStart, tmEnd;
+            localtime_s(&tmStart, &recordingStartTime);
+            localtime_s(&tmEnd, &endTime);
+            txtFile << "Recording Metadata\n";
+            txtFile << "==================\n";
+            txtFile << "File: " << filename << "\n";
+            txtFile << "Start Time: " << std::put_time(&tmStart, "%Y-%m-%d %H:%M:%S") << "\n";
+            txtFile << "End Time: " << std::put_time(&tmEnd, "%Y-%m-%d %H:%M:%S") << "\n";
+            double duration = difftime(endTime, recordingStartTime);
+            txtFile << "Duration: " << duration << " seconds\n";
+            txtFile << "Mode: Streaming (crash-safe)\n";
+            txtFile.close();
+        }
+    }
+    if (hRecorderWnd) UpdateRecorderUI(hRecorderWnd);
+}
