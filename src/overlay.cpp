@@ -90,7 +90,10 @@ void UpdateOverlay() {
 }
 
 void UpdateMeter() {
-    if (hMeterWnd && IsWindowVisible(hMeterWnd)) {
+    bool meterVisible = (hMeterWnd && IsWindowVisible(hMeterWnd));
+    bool panelVisible = (hControlPanel && IsWindowVisible(hControlPanel));
+
+    if (meterVisible || panelVisible) {
         // Get current levels
         float micLevel = GetMicLevel();
         float spkLevel = GetSpeakerLevel();
@@ -100,8 +103,10 @@ void UpdateMeter() {
         
         levelHistoryIndex = (levelHistoryIndex + 1) % LEVEL_HISTORY_SIZE;
         
-        // Invalidate without erasing background to prevent flicker
-        InvalidateRect(hMeterWnd, nullptr, FALSE);
+        // Invalidate legacy meter if visible
+        if (meterVisible) {
+            InvalidateRect(hMeterWnd, nullptr, FALSE);
+        }
     }
 }
 
