@@ -3,6 +3,7 @@
 #include "recorder.h"
 #include "http_server.h"
 #include "globals.h"
+#include "settings.h"
 #include "audio.h"
 #include <shlobj.h>
 #include <fstream>
@@ -251,6 +252,14 @@ void CallAutoRecorder::SaveCurrentRecording() {
         CreateMetadataFile(savedPath, recordingStartTime, endTime);
         // Notify recorder window about saved file
         NotifyAutoRecordSaved(filename);
+
+        // Update Global Stats
+        appStats.callsToday++;
+        appStats.callsTotal++;
+        SaveStats();
+        
+        // Update UI (Invalidate Main Window to show new stats)
+        InvalidateRect(hMainWnd, nullptr, TRUE);
     }
 }
 

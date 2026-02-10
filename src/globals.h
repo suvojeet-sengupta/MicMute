@@ -62,6 +62,28 @@ extern COLORREF colorToggleCircle;
 extern COLORREF colorSidebarHover;
 extern COLORREF colorSidebarSelected;
 
+// New Customization Settings
+enum class BackgroundStyle {
+    Mica,
+    Solid,
+    Custom
+};
+
+extern std::string customTitle;
+extern bool isTitleBold;
+extern COLORREF customTitleColor;
+extern BackgroundStyle backgroundStyle;
+extern COLORREF customBackgroundColor;
+
+// Statistics
+struct AppStats {
+    int callsToday;
+    int callsTotal;
+    int mutesToday;
+    std::string lastResetDate; // YYYY-MM-DD
+};
+extern AppStats appStats;
+
 extern HBRUSH hBrushBg;
 extern HBRUSH hBrushSidebarBg;
 extern HBRUSH hBrushOverlayMuted;

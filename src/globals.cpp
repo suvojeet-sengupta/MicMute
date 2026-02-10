@@ -57,6 +57,16 @@ COLORREF colorToggleCircle = RGB(255, 255, 255);
 COLORREF colorSidebarHover = RGB(50, 50, 50);    // Subtle highlight
 COLORREF colorSidebarSelected = RGB(0, 120, 215); // Accent highlight
 
+// New Customization Settings
+std::string customTitle = "MicMute";
+bool isTitleBold = true;
+COLORREF customTitleColor = RGB(240, 240, 240);
+BackgroundStyle backgroundStyle = BackgroundStyle::Mica;
+COLORREF customBackgroundColor = RGB(32, 32, 32);
+
+// Statistics
+AppStats appStats = {0, 0, 0, ""};
+
 HBRUSH hBrushBg;
 HBRUSH hBrushSidebarBg;
 HBRUSH hBrushOverlayMuted;

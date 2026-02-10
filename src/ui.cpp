@@ -24,5 +24,11 @@ void UpdateUIState() {
 
 void ToggleMute() {
     ToggleMuteAll();
+    
+    // Stats
+    appStats.mutesToday++;
+    SaveStats(); // Periodically save? Or just rely on end session.
+    // Saving every time might be too much I/O, but for now it ensures safety.
+
     UpdateUIState();
 }

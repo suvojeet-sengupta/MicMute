@@ -138,3 +138,84 @@ bool IsStartupEnabled() {
     }
     return exists;
 }
+
+void SaveStats() {
+    HKEY hKey;
+    if (RegCreateKey(HKEY_CURRENT_USER, "Software\\MicMute-S\\Stats", &hKey) == ERROR_SUCCESS) {
+        RegSetValueEx(hKey, "CallsToday", 0, REG_DWORD, (BYTE*)&appStats.callsToday, sizeof(DWORD));
+        RegSetValueEx(hKey, "CallsTotal", 0, REG_DWORD, (BYTE*)&appStats.callsTotal, sizeof(DWORD));
+        RegSetValueEx(hKey, "MutesToday", 0, REG_DWORD, (BYTE*)&appStats.mutesToday, sizeof(DWORD));
+        
+        if (!appStats.lastResetDate.empty()) {
+            RegSetValueEx(hKey, "LastResetDate", 0, REG_SZ, (const BYTE*)appStats.lastResetDate.c_str(), (DWORD)(appStats.lastResetDate.length() + 1));
+        }
+
+        // Also save customization here for convenience
+        RegSetValueEx(hKey, "CustomTitle", 0, REG_SZ, (const BYTE*)customTitle.c_str(), (DWORD)(customTitle.length() + 1));
+        DWORD bold = isTitleBold ? 1 : 0;
+        RegSetValueEx(hKey, "IsTitleBold", 0, REG_DWORD, (BYTE*)&bold, sizeof(DWORD));
+        RegSetValueEx(hKey, "TitleColor", 0, REG_DWORD, (BYTE*)&customTitleColor, sizeof(DWORD));
+        
+        DWORD bgStyle = (DWORD)backgroundStyle;
+        RegSetValueEx(hKey, "BackgroundStyle", 0, REG_DWORD, (BYTE*)&bgStyle, sizeof(DWORD));
+        RegSetValueEx(hKey, "CustomBackgroundColor", 0, REG_DWORD, (BYTE*)&customBackgroundColor, sizeof(DWORD));
+
+        RegCloseKey(hKey);
+    }
+}
+
+void LoadStats() {
+    HKEY hKey;
+    if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S\\Stats", &hKey) == ERROR_SUCCESS) {
+        DWORD size = sizeof(DWORD);
+        RegQueryValueEx(hKey, "CallsToday", nullptr, nullptr, (BYTE*)&appStats.callsToday, &size);
+        RegQueryValueEx(hKey, "CallsTotal", nullptr, nullptr, (BYTE*)&appStats.callsTotal, &size);
+        RegQueryValueEx(hKey, "MutesToday", nullptr, nullptr, (BYTE*)&appStats.mutesToday, &size);
+        
+        char buffer[64] = {0};
+        DWORD bufSize = sizeof(buffer);
+        if (RegQueryValueEx(hKey, "LastResetDate", nullptr, nullptr, (BYTE*)buffer, &bufSize) == ERROR_SUCCESS) {
+            appStats.lastResetDate = buffer;
+        }
+
+        // Customization
+        char titleBuf[128] = {0};
+        DWORD titleSize = sizeof(titleBuf);
+        if (RegQueryValueEx(hKey, "CustomTitle", nullptr, nullptr, (BYTE*)titleBuf, &titleSize) == ERROR_SUCCESS) {
+            customTitle = titleBuf;
+        }
+        
+        DWORD bold = 1;
+        if (RegQueryValueEx(hKey, "IsTitleBold", nullptr, nullptr, (BYTE*)&bold, &size) == ERROR_SUCCESS) {
+            isTitleBold = (bold != 0);
+        }
+
+        RegQueryValueEx(hKey, "TitleColor", nullptr, nullptr, (BYTE*)&customTitleColor, &size);
+        
+        DWORD bgStyle = 0;
+        if (RegQueryValueEx(hKey, "BackgroundStyle", nullptr, nullptr, (BYTE*)&bgStyle, &size) == ERROR_SUCCESS) {
+            backgroundStyle = (BackgroundStyle)bgStyle;
+        }
+        
+        RegQueryValueEx(hKey, "CustomBackgroundColor", nullptr, nullptr, (BYTE*)&customBackgroundColor, &size);
+
+        RegCloseKey(hKey);
+    }
+
+    // Check for daily reset
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    char today[32];
+    sprintf_s(today, "%04d-%02d-%02d", st.wYear, st.wMonth, st.wDay);
+    
+    if (appStats.lastResetDate != today) {
+        ResetDailyStats();
+        appStats.lastResetDate = today;
+        SaveStats();
+    }
+}
+
+void ResetDailyStats() {
+    appStats.callsToday = 0;
+    appStats.mutesToday = 0;
+}

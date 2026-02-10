@@ -13,3 +13,8 @@ void SaveSettings();
 void LoadSettings();
 void ManageStartup(bool enable);
 bool IsStartupEnabled();
+
+// Statistics and Customization
+void SaveStats();
+void LoadStats();
+void ResetDailyStats();
