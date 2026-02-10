@@ -1,121 +1,79 @@
 <div align="center">
 
 # MicMute-S
-### The Ultimate Microphone Control Utility for Windows
+### Professional Microphone Control Utility for Windows
 
-[![Release](https://img.shields.io/github/v/release/suvojeet-sengupta/MicMute?style=for-the-badge&color=0078D6&logo=github)](https://github.com/suvojeet-sengupta/MicMute/releases)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/suvojeet-sengupta/MicMute/build.yml?branch=main&style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/suvojeet-sengupta/MicMute/actions)
-[![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://microsoft.com)
-[![License](https://img.shields.io/github/license/suvojeet-sengupta/MicMute?style=for-the-badge&color=blueviolet)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/suvojeet-sengupta/MicMute/total?style=for-the-badge&color=success&logo=github)](https://github.com/suvojeet-sengupta/MicMute/releases)
+[![Release](https://img.shields.io/github/v/release/suvojeet-sengupta/MicMute?style=flat-square&color=0078D6&logo=github)](https://github.com/suvojeet-sengupta/MicMute/releases)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/suvojeet-sengupta/MicMute/build.yml?branch=main&style=flat-square&logo=github-actions&logoColor=white)](https://github.com/suvojeet-sengupta/MicMute/actions)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D6?style=flat-square&logo=windows&logoColor=white)](https://microsoft.com)
+[![License](https://img.shields.io/github/license/suvojeet-sengupta/MicMute?style=flat-square&color=blueviolet)](LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/suvojeet-sengupta/MicMute/total?style=flat-square&color=success&logo=github)](https://github.com/suvojeet-sengupta/MicMute/releases)
 
-<br/>
+MicMute-S is a high-performance system-wide microphone control utility designed for Windows 10 and 11. Built with modern UI standards and a focus on privacy, it provides seamless audio management for professionals, streamers, and privacy-conscious users.
 
-**MicMute-S** provides system-wide microphone control with a modern, high-performance interface. Designed for gamers, streamers, and professionals who need absolute audio privacy.
-
-[Download Latest Version](https://github.com/suvojeet-sengupta/MicMute/releases/latest) • [Report Bug](https://github.com/suvojeet-sengupta/MicMute/issues) • [Request Feature](https://github.com/suvojeet-sengupta/MicMute/issues)
+[Download Latest Release](https://github.com/suvojeet-sengupta/MicMute/releases/latest) | [Documentation](#usage) | [Build Instructions](#building-from-source)
 
 </div>
 
 ---
 
-## Key Features
+## Core Capabilities
 
-<table>
-  <tr>
-    <td width="50%">
-      <h3>Global Mute Control</h3>
-      <p>Instantly mute or unmute all connected microphones with a single click or hotkey. Works system-wide across all applications.</p>
-    </td>
-    <td width="50%">
-      <h3>Force Mute Protection</h3>
-      <p>Lock your microphone in a muted state. MicMute-S actively monitors and re-mutes your device if any other application attempts to unmute it.</p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <h3>Modern UI with Mica</h3>
-      <p>Features a sleek, Windows 11-native design with Mica / Acrylic transparency effects and a dark mode interface.</p>
-    </td>
-    <td width="50%">
-      <h3>Integrated Audio Meter</h3>
-      <p>Real-time visual feedback of your microphone input levels, ensuring you know exactly when you're transmitting.</p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <h3>Built-in Recorder</h3>
-      <p>Simple and efficient audio recorder included, allowing you to test your settings or record quick notes.</p>
-    </td>
-    <td width="50%">
-      <h3>Smart Notifications</h3>
-      <p>Receive unobtrusive Toast notifications and Tray icon changes (Green/Red) to instantly know your status.</p>
-    </td>
-  </tr>
-</table>
+### Professional Audio Privacy
+*   **System-Wide Control**: Toggle all connected microphones with a single global hotkey or tray interaction.
+*   **Force Mute Protection**: Active monitoring layer that prevents other applications from unmuting your hardware.
+*   **Visual Confidence**: Real-time tray indicators (Red/Green) and unobtrusive toast notifications ensure you always know your status.
+
+### Modern Interface
+*   **Windows Native Design**: Leverages Mica and Acrylic transparency effects for a premium look and feel.
+*   **Dynamic Audio Metering**: Integrated real-time visualizer for input levels.
+*   **Compact UI**: Refactored horizontal control panel for streamlined workspace impact.
+
+### Enterprise Integration
+*   **Ozonetel Bridge**: Dedicated Chrome extension integration for automatic call recording and status synchronization.
+*   **Local HTTP API**: Lightweight server for external control and status polling.
+*   **Streaming WAV Engine**: High-reliability recording system that writes directly to disk to prevent data loss.
 
 ## Technology Stack
 
-![C++](https://img.shields.io/badge/C++17-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white)
-![Win32 API](https://img.shields.io/badge/Win32_API-0078D6?style=for-the-badge&logo=windows&logoColor=white)
-![Inno Setup](https://img.shields.io/badge/Inno_Setup-orange?style=for-the-badge&logo=windows-terminal&logoColor=white)
-![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)
+| Component | Technology | Badge |
+| :--- | :--- | :--- |
+| **Language** | C++17 | ![C++](https://img.shields.io/badge/C++17-00599C?style=flat-square&logo=c%2B%2B&logoColor=white) |
+| **API** | Win32 / WASAPI | ![Win32](https://img.shields.io/badge/Win32_API-0078D6?style=flat-square&logo=windows&logoColor=white) |
+| **Installer** | Inno Setup | ![Inno](https://img.shields.io/badge/Inno_Setup-orange?style=flat-square&logo=windows-terminal&logoColor=white) |
+| **Automation** | GitHub Actions | ![Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=flat-square&logo=github-actions&logoColor=white) |
 
 ## Installation
 
-1.  **Download**: Get the latest `MicMute-S-Setup.exe` from the [Releases Page](https://github.com/suvojeet-sengupta/MicMute/releases).
-2.  **Install**: Run the installer and follow the on-screen instructions.
-3.  **Launch**: MicMute-S will start automatically and minimize to the system tray.
+1.  **Download**: Obtain the latest `MicMute-S-Setup.exe` from the [Releases](https://github.com/suvojeet-sengupta/MicMute/releases).
+2.  **Install**: Follow the standard Inno Setup installation wizard.
+3.  **Deploy**: The application runs from the system tray and starts automatically with Windows (optional).
 
-> **Note**: Windows SmartScreen may appear since the binary is not signed. You can safely click "Run Anyway".
-
-## Usage
-
-*   **Toggle Mute**: Click the tray icon or use the configurable global hotkey.
-*   **Settings**: Right-click the tray icon to access:
-    *   **General**: Startup behavior, Overlay settings.
-    *   **Hotkeys**: Customize your mute toggle shortcuts.
-    *   **Audio**: Select specific devices or test input.
-    *   **Appearance**: Custom themes and UI preferences.
+> [!NOTE]
+> As the binary is currently self-signed, Windows SmartScreen may present a warning. Select "More Info" -> "Run Anyway" to proceed.
 
 ## Building from Source
 
-To build MicMute-S locally, you need the following prerequisites:
+### Prerequisites
+*   **Visual Studio 2022** (Desktop Development with C++)
+*   **Inno Setup 6** (for installer generation)
+*   **Python 3.x** (for icon generation scripts)
 
-*   **Visual Studio 2019/2022** with C++ Desktop Development workload.
-*   **Inno Setup 6** (for building the installer).
-
-### Steps (Local)
-
+### Local Development Flow
 1.  Clone the repository:
     ```bash
     git clone https://github.com/suvojeet-sengupta/MicMute.git
     ```
-2.  Open the project solution in Visual Studio.
-3.  Select **Release** configuration and **x64** platform.
-4.  Build the solution (`Ctrl+Shift+B`).
-5.  (Optional) Run `installer.iss` with Inno Setup Compiler to generate the setup file.
+2.  Open `MicMute.sln` in Visual Studio.
+3.  Build configuration: **Release** | **x64**.
+4.  Execute build (`Ctrl+Shift+B`).
+5.  Generate installer using `installer.iss`.
 
-### Steps (Automated)
-
-This repository aims to use GitHub Actions for CI/CD. Pushing to the `main` branch triggers the build workflow found in `.github/workflows/build.yml`.
-
-## Contributing
-
-Contributions are welcome! Please feel free to verify existing issues or create a new one.
-
-1.  Fork the Project
-2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4.  Push to the Branch (`git push origin feature/AmazingFeature`)
-5.  Open a Pull Request
-
-## License
-
-Distributed under the MIT License. See `LICENSE` for more information.
+## Extension Ecosystem
+MicMute-S includes a specialized Chrome extension located in `/extension` for integration with Ozonetel-based CRM systems. It communicates via a local HTTP bridge at `localhost:9876` for seamless state management.
 
 ---
 
 <div align="center">
-  <p>Developed with ❤️ by <a href="https://github.com/suvojeet-sengupta">Suvojeet Sengupta</a></p>
+  Developed by <a href="https://github.com/suvojeet-sengupta">Suvojeet Sengupta</a>
 </div>
