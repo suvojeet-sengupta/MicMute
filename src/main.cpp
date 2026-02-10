@@ -255,9 +255,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     CreateControlPanel(hInstance);
     
     // Legacy: still support individual windows if user prefers
-    if (showOverlay) CreateOverlayWindow(hInstance);
-    if (showMeter) CreateMeterWindow(hInstance);
-    if (showRecorder) CreateRecorderWindow(hInstance);
+    // if (showOverlay) CreateOverlayWindow(hInstance); 
+    // if (showMeter) CreateMeterWindow(hInstance);
+    // if (showRecorder) CreateRecorderWindow(hInstance);
     
     if (autoRecordCalls && g_CallRecorder) {
         g_CallRecorder->Enable();
@@ -696,31 +696,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 InvalidateRect(hStartupCheck, nullptr, FALSE);
             }
             else if (wmId == ID_SHOW_OVERLAY) {
-                showOverlay = !showOverlay;
+                // Remapped to: Show Mute Button in Panel
+                showMuteBtn = !showMuteBtn;
                 SaveSettings();
-                if (showOverlay) {
-                    if (!hOverlayWnd) CreateOverlayWindow(GetModuleHandle(nullptr));
-                    else ShowWindow(hOverlayWnd, SW_SHOW);
-                    UpdateOverlay();
-                } else if (hOverlayWnd) ShowWindow(hOverlayWnd, SW_HIDE);
+                UpdateControlPanel();
                 InvalidateRect(hOverlayCheck, nullptr, FALSE);
             }
             else if (wmId == ID_SHOW_METER) {
-                showMeter = !showMeter;
+                // Remapped to: Show Voice Meter in Panel
+                showVoiceMeter = !showVoiceMeter;
                 SaveSettings();
-                if (showMeter) {
-                    if (!hMeterWnd) CreateMeterWindow(GetModuleHandle(nullptr));
-                    else ShowWindow(hMeterWnd, SW_SHOW);
-                } else if (hMeterWnd) ShowWindow(hMeterWnd, SW_HIDE);
+                UpdateControlPanel();
                 InvalidateRect(hMeterCheck, nullptr, FALSE);
             }
             else if (wmId == ID_SHOW_RECORDER) {
-                showRecorder = !showRecorder;
+                // Remapped to: Show Recorder Status + Manual Rec in Panel
+                bool newState = !showRecStatus; 
+                showRecStatus = newState;
+                showManualRec = newState;
                 SaveSettings();
-                if (showRecorder) {
-                    if (!hRecorderWnd) CreateRecorderWindow(GetModuleHandle(nullptr));
-                    else ShowWindow(hRecorderWnd, SW_SHOW);
-                } else if (hRecorderWnd) ShowWindow(hRecorderWnd, SW_HIDE);
+                UpdateControlPanel();
                 InvalidateRect(hRecorderCheck, nullptr, FALSE);
             }
             else if (wmId == ID_SHOW_NOTIFICATIONS) {

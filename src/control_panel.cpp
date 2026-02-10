@@ -441,6 +441,27 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     HBRUSH red = CreateSolidBrush(RGB(255, 70, 70));
                     FillRect(mem, &sq, red);
                     DeleteObject(red);
+                    drawX += btnW + 4;
+                }
+
+                // Folder button
+                {
+                    RECT rc = {drawX, bY, drawX + btnW, bY + btnH};
+                    HBRUSH br = CreateSolidBrush(RGB(45, 45, 60));
+                    FillRect(mem, &rc, br);
+                    DeleteObject(br);
+
+                    int cx = (rc.left + rc.right) / 2;
+                    int cy = (rc.top + rc.bottom) / 2;
+                    
+                    // Draw simple folder shape
+                    HBRUSH folderBr = CreateSolidBrush(RGB(200, 200, 220));
+                    RECT rBody = {cx - 7, cy - 4, cx + 7, cy + 6};
+                    RECT rTab = {cx - 7, cy - 7, cx - 2, cy - 4};
+                    FillRect(mem, &rBody, folderBr);
+                    FillRect(mem, &rTab, folderBr);
+                    DeleteObject(folderBr);
+                    
                     drawX += btnW + margin;
                 }
 
@@ -534,6 +555,14 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
                     HandleManualStop(hWnd);
                     InvalidateRect(hWnd, nullptr, FALSE);
+                    return 0;
+                }
+                drawX += btnW + 4;
+
+                // Folder
+                if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
+                    extern void ChangeRecordingFolder(HWND parent);
+                    ChangeRecordingFolder(hWnd);
                     return 0;
                 }
             }

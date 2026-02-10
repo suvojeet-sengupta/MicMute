@@ -98,6 +98,7 @@ void NotifyAutoRecordSaved(const std::string& filename) {
     }
 }
 
+// Helpers
 std::string BrowseFolder(HWND owner) {
     char path[MAX_PATH];
     BROWSEINFO bi = { 0 };
@@ -114,6 +115,20 @@ std::string BrowseFolder(HWND owner) {
         CoTaskMemFree(pidl);
     }
     return "";
+}
+
+void ChangeRecordingFolder(HWND parent) {
+    if (recorder.IsRecording()) {
+        MessageBox(parent, "Please stop recording before changing the folder.", "Recording in Progress", MB_ICONWARNING);
+        return;
+    }
+    
+    std::string newPath = BrowseFolder(parent);
+    if (!newPath.empty()) {
+        recordingFolder = newPath;
+        SaveSettings();
+        MessageBox(parent, "Recording folder updated!", "MicMute-S", MB_OK);
+    }
 }
 
 // Ensure a recording folder is selected. Returns true if valid, false if cancelled.

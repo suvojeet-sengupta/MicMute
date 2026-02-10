@@ -112,18 +112,28 @@ void LoadSettings() {
     if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD), val = 0;
         
-        if (RegQueryValueEx(hKey, "ShowOverlay", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+        if (RegQueryValueEx(hKey, "ShowOverlay", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS) {
             showOverlay = val != 0;
-        if (RegQueryValueEx(hKey, "ShowMeter", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            // Legacy mapping
+            showMuteBtn = showOverlay;
+        }
+        if (RegQueryValueEx(hKey, "ShowMeter", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS) {
             showMeter = val != 0;
-        if (RegQueryValueEx(hKey, "ShowRecorder", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            // Legacy mapping
+            showVoiceMeter = showMeter;
+        }
+        if (RegQueryValueEx(hKey, "ShowRecorder", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS) {
             showRecorder = val != 0;
+            // Legacy mapping
+            showRecStatus = showRecorder;
+            showManualRec = showRecorder;
+        }
         if (RegQueryValueEx(hKey, "ShowNotifications", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             showNotifications = val != 0;
         if (RegQueryValueEx(hKey, "AutoRecordCalls", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             autoRecordCalls = val != 0;
         
-        // Control panel visibility toggles
+        // Control panel visibility toggles (override legacy if present)
         size = sizeof(DWORD);
         if (RegQueryValueEx(hKey, "ShowMuteBtn", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             showMuteBtn = val != 0;

@@ -36,3 +36,4 @@ bool IsManualRecording();
 bool IsManualPaused();
 void HandleManualStartPause(HWND parent);
 void HandleManualStop(HWND parent);
+void ChangeRecordingFolder(HWND parent);
