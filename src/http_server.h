@@ -27,6 +27,9 @@ bool IsExtensionConnected();
 DWORD GetTimeSinceLastHeartbeat();
 
 // Force start/stop recording (called by HTTP endpoints)
-void HttpForceStartRecording();
-void HttpForceStopRecording();
+#include <map>
+
+// Force start/stop recording (called by HTTP endpoints)
+void HttpForceStartRecording(const std::map<std::string, std::string>& metadata = {});
+void HttpForceStopRecording(const std::map<std::string, std::string>& metadata = {});
 

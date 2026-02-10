@@ -46,9 +46,66 @@
         return 'unknown';
     }
 
+    // Scrape all call details from the UI
+    function scrapeCallDetails() {
+        const details = {};
+
+        // 1. Try to find the "Call Details" section
+        // Based on typical Ozonetel UI, this might be in a specific container
+        // We'll look for labels and values
+
+        // Strategy A: Look for specific known fields if they exist as labelled rows
+        const rows = document.querySelectorAll('.call-details-row, .details-row, tr');
+        rows.forEach(row => {
+            const label = row.querySelector('.label, th, dt')?.innerText?.trim();
+            const value = row.querySelector('.value, td, dd')?.innerText?.trim();
+            if (label && value) {
+                details[label.replace(':', '')] = value;
+            }
+        });
+
+        // Strategy B: If Strategy A fails, try to parse text content of a known container
+        // This is a fallback if specific classes aren't found
+        if (Object.keys(details).length === 0) {
+            const detailsContainer = Array.from(document.querySelectorAll('div, section')).find(el =>
+                el.innerText && el.innerText.includes('Call Details') && el.innerText.length < 1000
+            );
+
+            if (detailsContainer) {
+                const lines = detailsContainer.innerText.split('\n');
+                lines.forEach(line => {
+                    const parts = line.split(':');
+                    if (parts.length >= 2) {
+                        const key = parts[0].trim();
+                        const val = parts.slice(1).join(':').trim(); // Rejoin rest in case value has :
+                        if (key && val && key !== 'Call Details') {
+                            details[key] = val;
+                        }
+                    }
+                });
+            }
+        }
+
+        // Capture Campaign Name specifically if visible elsewhere
+        const campaignEl = document.querySelector('[class*="campaign"], [id*="campaign"]');
+        if (campaignEl && !details['Campaign']) {
+            details['Campaign'] = campaignEl.innerText.trim();
+        }
+
+        // Capture Phone Number
+        const phoneEl = document.querySelector('.phone-number, [class*="phone"]');
+        if (phoneEl && !details['Phone']) {
+            details['Phone'] = phoneEl.innerText.trim();
+        }
+
+        return details;
+    }
+
     // Send signal to MicMute local server
     async function signalMicMute(action) {
         try {
+            const metadata = (action === 'start' || action === 'stop') ? scrapeCallDetails() : {};
+
             const response = await fetch(`${MICMUTE_SERVER}/${action}`, {
                 method: 'POST',
                 headers: {
@@ -56,12 +113,13 @@
                 },
                 body: JSON.stringify({
                     source: 'ozonetel',
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    metadata: metadata // Send scraped details
                 })
             });
 
             if (response.ok) {
-                console.log(`[MicMute Connector] Signal sent: ${action}`);
+                console.log(`[MicMute Connector] Signal sent: ${action}`, metadata);
                 return true;
             } else {
                 console.warn(`[MicMute Connector] Signal failed: ${action}`);
@@ -95,6 +153,7 @@
             });
         } else if (status === 'ready' && isRecording) {
             // Call ended - stop recording
+            // We signal STOP *with* metadata to ensure we capture any details that might have loaded late
             signalMicMute('stop').then(success => {
                 if (success) {
                     isRecording = false;

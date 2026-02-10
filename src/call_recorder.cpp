@@ -187,11 +187,14 @@ void CallAutoRecorder::OnSilenceTimeout() {
 }
 
 // Force start recording from external trigger (HTTP server)
-void CallAutoRecorder::ForceStartRecording() {
+void CallAutoRecorder::ForceStartRecording(const std::map<std::string, std::string>& metadata) {
     if (!pRecorder) return;
     
     // If already recording, do nothing
     if (currentState == State::RECORDING) return;
+
+    // Store initial metadata
+    currentCallMetadata = metadata;
 
     // Enforce Folder Selection (Must be on UI thread really, but let's try direct call or use main window)
     // Since this might be called from HTTP thread, we need to be careful. 
@@ -223,11 +226,18 @@ void CallAutoRecorder::ForceStartRecording() {
 }
 
 // Force stop recording from external trigger (HTTP server)
-void CallAutoRecorder::ForceStopRecording() {
+void CallAutoRecorder::ForceStopRecording(const std::map<std::string, std::string>& metadata) {
     if (!pRecorder) return;
     
     // If not recording, do nothing
     if (currentState != State::RECORDING) return;
+    
+    // Update/Merge metadata (extension sends fresh full data on stop)
+    if (!metadata.empty()) {
+        for (const auto& kv : metadata) {
+            currentCallMetadata[kv.first] = kv.second;
+        }
+    }
     
     TransitionTo(State::SAVING);
     
@@ -242,6 +252,9 @@ void CallAutoRecorder::ForceStopRecording() {
         // Too short - just cleanup (FinalizeStreaming will still save temp file)
         pRecorder->FinalizeStreaming("discarded.wav");
     }
+    
+    // Clear metadata
+    currentCallMetadata.clear();
     
     // Ready for next call (waiting for extension signal)
     TransitionTo(State::DETECTING);
@@ -314,6 +327,15 @@ void CallAutoRecorder::CreateMetadataFile(const std::string& audioPath, time_t s
         txtFile << "End Time: " << std::put_time(&tmEnd, "%Y-%m-%d %H:%M:%S") << "\n";
         txtFile << "Duration: " << duration << " seconds\n";
         txtFile << "Call Number: " << todayCallCount << "\n";
+        
+        // Write dynamic metadata from Ozonetel
+        if (!currentCallMetadata.empty()) {
+            txtFile << "\n[Ozonetel Details]\n";
+            for (const auto& kv : currentCallMetadata) {
+                txtFile << kv.first << ": " << kv.second << "\n";
+            }
+        }
+        
         txtFile.close();
     }
 }

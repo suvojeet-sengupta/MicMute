@@ -8,16 +8,73 @@
 #pragma comment(lib, "ws2_32.lib")
 
 constexpr int HTTP_PORT = 9876;
-constexpr size_t BUFFER_SIZE = 4096;
+constexpr size_t BUFFER_SIZE = 16384; // Increased buffer for metadata
 
 static SOCKET serverSocket = INVALID_SOCKET;
 static std::atomic<bool> serverRunning(false);
 static std::thread serverThread;
 
+#include <map>
+#include <vector>
+
 // Extension connection tracking
 static DWORD lastHeartbeatTime = 0;
 static std::atomic<bool> extensionConnected(false);
 #define HEARTBEAT_TIMEOUT_MS 5000  // 5 seconds without heartbeat = disconnected
+
+// Very basic JSON parser for flat string key-value pairs
+// e.g. {"source":"ozonetel", "metadata":{"key":"value"}}
+std::map<std::string, std::string> ParseMetadataFromJSON(const std::string& json) {
+    std::map<std::string, std::string> metadata;
+    
+    // Find "metadata" key
+    size_t metadataPos = json.find("\"metadata\"");
+    if (metadataPos == std::string::npos) return metadata;
+    
+    // Find opening brace of metadata object
+    size_t startObj = json.find('{', metadataPos);
+    if (startObj == std::string::npos) return metadata;
+    
+    // Naive parsing: find "key":"value" pairs inside the object
+    // This assumes no nested objects in metadata and standard formatting
+    size_t curr = startObj + 1;
+    while (curr < json.length()) {
+        // Find key start
+        size_t keyStart = json.find('"', curr);
+        if (keyStart == std::string::npos) break;
+        
+        // Check if we hit end of object before key
+        size_t endObj = json.find('}', curr);
+        if (endObj != std::string::npos && endObj < keyStart) break;
+        
+        size_t keyEnd = json.find('"', keyStart + 1);
+        if (keyEnd == std::string::npos) break;
+        
+        std::string key = json.substr(keyStart + 1, keyEnd - keyStart - 1);
+        
+        // Find colon
+        size_t colon = json.find(':', keyEnd);
+        if (colon == std::string::npos) break;
+        
+        // Find value
+        size_t valStart = json.find('"', colon);
+        if (valStart == std::string::npos) break;
+        
+        size_t valEnd = json.find('"', valStart + 1);
+        if (valEnd == std::string::npos) break;
+        
+        std::string val = json.substr(valStart + 1, valEnd - valStart - 1);
+        
+        // Unescape minimal chars if needed (basic)
+        // For now, accept as is
+        
+        metadata[key] = val;
+        
+        curr = valEnd + 1;
+    }
+    
+    return metadata;
+}
 
 // Send HTTP response
 void SendResponse(SOCKET client, int statusCode, const char* statusText, const char* body) {
@@ -57,6 +114,14 @@ void HandleRequest(SOCKET client) {
         SendResponse(client, 200, "OK", "{}");
         closesocket(client);
         return;
+        return;
+    }
+    
+    std::string bodyStr = "";
+    // Find body (after double \r\n)
+    char* bodyStart = strstr(buffer, "\r\n\r\n");
+    if (bodyStart) {
+        bodyStr = std::string(bodyStart + 4);
     }
     
     // Handle POST requests
@@ -71,14 +136,20 @@ void HandleRequest(SOCKET client) {
             // Start recording via extension signal
             lastHeartbeatTime = GetTickCount();
             extensionConnected = true;
-            HttpForceStartRecording();
+            
+            std::map<std::string, std::string> metadata = ParseMetadataFromJSON(bodyStr);
+            HttpForceStartRecording(metadata);
+            
             SendResponse(client, 200, "OK", "{\"status\":\"recording_started\"}");
         }
         else if (strcmp(path, "/stop") == 0) {
             // Stop recording and save via extension signal
             lastHeartbeatTime = GetTickCount();
             extensionConnected = true;
-            HttpForceStopRecording();
+            
+            std::map<std::string, std::string> metadata = ParseMetadataFromJSON(bodyStr);
+            HttpForceStopRecording(metadata);
+            
             SendResponse(client, 200, "OK", "{\"status\":\"recording_stopped\"}");
         }
         else if (strcmp(path, "/status") == 0) {
@@ -209,17 +280,17 @@ DWORD GetTimeSinceLastHeartbeat() {
     return GetTickCount() - lastHeartbeatTime;
 }
 
-void HttpForceStartRecording() {
+void HttpForceStartRecording(const std::map<std::string, std::string>& metadata) {
     if (!g_CallRecorder) return;
     
     // Force the recorder to start recording immediately
-    g_CallRecorder->ForceStartRecording();
+    g_CallRecorder->ForceStartRecording(metadata);
 }
 
-void HttpForceStopRecording() {
+void HttpForceStopRecording(const std::map<std::string, std::string>& metadata) {
     if (!g_CallRecorder) return;
     
     // Force stop and save
-    g_CallRecorder->ForceStopRecording();
+    g_CallRecorder->ForceStopRecording(metadata);
 }
 

@@ -35,9 +35,11 @@ public:
     // Get current state
     State GetState() const { return currentState; }
     
+#include <map>
+
     // Force start/stop from external source (HTTP server)
-    void ForceStartRecording();
-    void ForceStopRecording();
+    void ForceStartRecording(const std::map<std::string, std::string>& metadata = {});
+    void ForceStopRecording(const std::map<std::string, std::string>& metadata = {});
     
     // Statistics
     int GetTodayCallCount() const { return todayCallCount; }
@@ -92,6 +94,9 @@ private:
     int todayCallCount;
     std::string currentDate;  // YYYY-MM-DD format
     
+    // Metadata for current call
+    std::map<std::string, std::string> currentCallMetadata;
+
     // Recorder instance (uses existing WasapiRecorder)
     WasapiRecorder* pRecorder;
 };
