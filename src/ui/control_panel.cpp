@@ -321,7 +321,7 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             }
 
             // === Separator ===
-            if (showMuteBtn && (showVoiceMeter || showRecStatus || showManualRec || showCallStats)) {
+            if (showMuteBtn && (showVoiceMeter || (isDevModeEnabled && (showRecStatus || showManualRec || showCallStats)))) {
                 HPEN sepPen = CreatePen(PS_SOLID, 1, colorPanelBorder);
                 SelectObject(mem, sepPen);
                 MoveToEx(mem, drawX, 6, nullptr);
@@ -363,7 +363,7 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             }
 
             // === Section 3: Recording Status ===
-            if (showRecStatus) {
+            if (isDevModeEnabled && showRecStatus) {
                 int statusW = 140;
                 RECT statusRect = {drawX, 4, drawX + statusW, panelH - 4};
 
@@ -443,7 +443,7 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             }
 
             // === Section 4: Manual Record Buttons ===
-            if (showManualRec) {
+            if (isDevModeEnabled && showManualRec) {
                 int btnW = 28;
                 int btnH = 28;
                 int bY = (panelH - btnH) / 2;
@@ -540,7 +540,7 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             }
 
             // Separator between manual rec and call stats
-            if (showManualRec && showCallStats) {
+            if (isDevModeEnabled && showManualRec && showCallStats) {
                  // Gradient Separator
                 for(int i=6; i<panelH-6; i++) {
                     int alpha = 255 - abs(i - panelH/2) * 5;
@@ -551,7 +551,7 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             }
 
             // === Section 5: Call Stats ===
-            if (showCallStats) {
+            if (isDevModeEnabled && showCallStats) {
                 std::string stats = GetCallStatsString();
                 if (!stats.empty()) {
                     // Stats badge
@@ -657,9 +657,9 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             }
             
             if (showVoiceMeter) drawX += 120 + margin * 2;
-            if (showRecStatus) drawX += 140 + margin;
+            if (showRecStatus && isDevModeEnabled) drawX += 140 + margin;
             
-            if (showManualRec) {
+            if (showManualRec && isDevModeEnabled) {
                 int btnW = 28;
                 int bY = (panelH - btnW) / 2;
                 
@@ -676,7 +676,7 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 drawX += btnW + margin * 2; // + separator
             }
             
-            if (showCallStats) drawX += 100 + margin;
+            if (showCallStats && isDevModeEnabled) drawX += 100 + margin;
             
             // Settings
             {
@@ -736,9 +736,9 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             }
             
             if (showVoiceMeter) drawX += 120 + margin * 2;
-            if (showRecStatus) drawX += 140 + margin;
+            if (showRecStatus && isDevModeEnabled) drawX += 140 + margin;
             
-            if (showManualRec) {
+            if (showManualRec && isDevModeEnabled) {
                 int btnW = 28;
                 int bY = (panelH - btnW) / 2;
                 
@@ -762,7 +762,7 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 drawX += btnW + margin * 2;
             }
             
-            if (showCallStats) drawX += 100 + margin;
+            if (showCallStats && isDevModeEnabled) drawX += 100 + margin;
             
             // Settings
             {
