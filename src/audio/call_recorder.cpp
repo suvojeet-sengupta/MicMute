@@ -415,6 +415,10 @@ void InitCallRecorder() {
     if (!g_CallRecorder) {
         g_CallRecorder = new CallAutoRecorder();
     }
+    // Ensure strict sync with setting
+    if (autoRecordCalls && g_CallRecorder && !g_CallRecorder->IsEnabled()) {
+        g_CallRecorder->Enable();
+    }
 }
 
 void CleanupCallRecorder() {
