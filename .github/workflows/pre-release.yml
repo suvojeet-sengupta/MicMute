@@ -1,0 +1,90 @@
+name: Auto Pre-Release
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup MSVC Developer Environment
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Install Inno Setup
+      run: choco install innosetup -y
+
+    - name: Create Build Directory
+      run: mkdir build\Release
+
+    - name: Compile Resources
+      run: |
+        rc.exe /v /fo resources\app.res resources\app.rc
+
+    - name: Compile C++ Application
+      run: cl.exe /nologo /O2 /EHsc /std:c++17 /D "NDEBUG" /D "_WINDOWS" /W3 /I src /Fe"build\Release\MicMute-S.exe" src\core\main.cpp src\core\globals.cpp src\core\settings.cpp src\audio\audio.cpp src\ui\tray.cpp src\ui\overlay.cpp src\ui\ui.cpp src\audio\recorder.cpp src\audio\WasapiRecorder.cpp src\audio\StreamingWavWriter.cpp src\ui\ui_controls.cpp src\audio\call_recorder.cpp src\network\http_server.cpp src\ui\control_panel.cpp src\network\updater.cpp resources\app.res user32.lib gdi32.lib shell32.lib ole32.lib uuid.lib Mmdevapi.lib advapi32.lib dwmapi.lib ws2_32.lib Winhttp.lib version.lib
+        
+    - name: Build Installer
+      run: iscc installer.iss
+
+    - name: Zip Ozonetel Extension
+      run: Compress-Archive -Path extension\* -DestinationPath build\Release\MicMute-Ozonetel-Extension.zip
+
+    - name: Upload Build Artifacts (Exe)
+      uses: actions/upload-artifact@v4
+      with:
+        name: MicMute-S-Executable
+        path: build/Release/MicMute-S.exe
+
+    - name: Upload Ozonetel Extension
+      uses: actions/upload-artifact@v4
+      with:
+        name: MicMute-Ozonetel-Extension
+        path: build/Release/MicMute-Ozonetel-Extension.zip
+
+    - name: Upload Installer
+      uses: actions/upload-artifact@v4
+      with:
+        name: MicMute-S-Installer
+        path: installer/MicMute-S-Setup.exe
+
+    - name: Get Version
+      id: get_version
+      shell: powershell
+      run: |
+        $content = Get-Content src/core/globals.cpp -Raw
+        if ($content -match 'APP_VERSION\s*=\s*"([^"]+)"') {
+          $version = $matches[1]
+          echo "APP_VERSION=$version" >> $env:GITHUB_OUTPUT
+        } else {
+          echo "APP_VERSION=v1.0.0" >> $env:GITHUB_OUTPUT
+        }
+
+    - name: Create Pre-Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.get_version.outputs.APP_VERSION }}-pre
+        name: MicMute-S ${{ steps.get_version.outputs.APP_VERSION }} (Pre-Release)
+        body: |
+          ## MicMute-S Automated Pre-Release
+          
+          This is an automated build of the latest changes on the main branch.
+          
+          ### Downloads
+          - `MicMute-S-Setup.exe` - Development Installer
+          - `MicMute-S.exe` - Development Portable
+        files: |
+          installer/MicMute-S-Setup.exe
+          build/Release/MicMute-S.exe
+          build/Release/MicMute-Ozonetel-Extension.zip
+        draft: false
+        prerelease: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
