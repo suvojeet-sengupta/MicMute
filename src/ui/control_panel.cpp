@@ -46,21 +46,110 @@ extern bool IsManualPaused();
 extern void HandleManualStartPause(HWND parent);
 extern void HandleManualStop(HWND parent);
 
-void GetPanelDimensions(int mode, float scale, int* outW, int* outH) {
-    switch (mode) {
-        case 0: // Compact
-            *outW = (int)(460 * scale);
-            *outH = (int)(56 * scale);
-            break;
-        case 2: // Wide
-            *outW = (int)(720 * scale);
-            *outH = (int)(72 * scale);
-            break;
-        default: // Normal
-            *outW = (int)(600 * scale);
-            *outH = (int)(64 * scale);
-            break;
+extern void HandleManualStartPause(HWND parent);
+extern void HandleManualStop(HWND parent);
+
+static int GetContentWidth(int height) {
+    int margin = 8;
+    int w = margin;
+    
+    if (showMuteBtn) {
+        int btnSize = height - margin * 2;
+        w += btnSize + margin;
     }
+
+    // Separator logic match
+    if (showMuteBtn && (showVoiceMeter || (isDevModeEnabled && (showRecStatus || showManualRec || showCallStats)))) {
+        w += margin;
+    }
+
+    if (showVoiceMeter) {
+         w += 120 + margin;
+         // Separator after meter
+         if (isDevModeEnabled && (showRecStatus || showManualRec || showCallStats)) {
+             w += margin;
+         }
+    } else if (showMuteBtn && (isDevModeEnabled && (showRecStatus || showManualRec || showCallStats))) {
+        // If meter is hidden but there are items after, they need a separator if mute btn is there
+        // (Handled by the first separator logic above? No, that just added margin. 
+        //  The paint logic adds separator line then advances drawX.
+        //  Let's stick to simple additive logic matching Paint:
+        //  Paint: Mute -> Separator -> Meter -> Separator -> Rec -> ...
+    }
+    
+    // Let's refine based on Paint exactly:
+    w = margin; // Start
+    
+    // Mute
+    if (showMuteBtn) {
+         int btnSize = height - margin * 2;
+         w += btnSize + margin;
+         
+         // Separator after mute?
+         if (showVoiceMeter || (isDevModeEnabled && (showRecStatus || showManualRec || showCallStats))) {
+             w += margin;
+         }
+    }
+    
+    // Meter
+    if (showVoiceMeter) {
+        w += 120 + margin;
+        // Separator after meter?
+        // Paint logic: if (showVoiceMeter) ... drawX += 120 + margin; ... Separator ... drawX += margin;
+        // Wait, Paint logic has Separator inside showVoiceMeter block?
+        // Let's check original Paint logic:
+        // if (showVoiceMeter) { ... drawX += 120 + margin; ... Separator ... drawX += margin; }
+        // YES, it has a separator at the end of its block!
+        w += margin; 
+    }
+    
+    // Rec Status
+    if (isDevModeEnabled && showRecStatus) {
+        w += 140 + margin;
+    }
+    
+    // Manual Rec
+    if (isDevModeEnabled && showManualRec) {
+        w += 28 + 4 + 28 + 4 + 28 + margin;
+        
+        // Separator after Manual Rec
+        if (showCallStats) { // Paint logic check: if (showManualRec && showCallStats)
+            w += margin;
+        }
+    }
+    
+    // Call Stats
+    if (isDevModeEnabled && showCallStats) {
+        w += 100 + margin;
+    }
+    
+    // Settings Button (Always there?)
+    {
+        w += margin; // Separator
+        w += 28 + margin;
+    }
+    
+    return w;
+}
+
+void GetPanelDimensions(int mode, float scale, int* outW, int* outH) {
+    // Mode impacts Height primarily
+    int baseH;
+    switch (mode) {
+        case 0: baseH = 56; break;
+        case 2: baseH = 72; break;
+        default: baseH = 64; break;
+    }
+    *outH = (int)(baseH * scale);
+    
+    // Dynamic Width
+    int contentW = GetContentWidth(*outH);
+    *outW = contentW; // Already scaled essentially because height is scaled and items depend on height or fixed px
+    // Wait, fixed px items (120, 140) are NOT scaled in Paint?
+    // In Paint: "int meterW = 120;" -> It's fixed pixels!
+    // So my GetContentWidth returns total pixels.
+    // The previous implementation multiplied 600 * scale. 
+    // Now we sum up pixels.
 }
 
 void SaveControlPanelPosition() {
@@ -267,6 +356,20 @@ void CreateControlPanel(HINSTANCE hInstance) {
 
 void UpdateControlPanel() {
     if (hControlPanel && IsWindowVisible(hControlPanel)) {
+        // Resize if content changed
+        int x, y, w, h;
+        RECT r; GetWindowRect(hControlPanel, &r);
+        float scale = GetWindowScale(hControlPanel);
+        GetPanelDimensions(panelSizeMode, scale, &w, &h);
+        
+        if (r.right - r.left != w || r.bottom - r.top != h) {
+             // Center horizontally? Or keep left/right? 
+             // Usually center.
+             int currentCenterX = (r.left + r.right) / 2;
+             int newLeft = currentCenterX - w / 2;
+             SetWindowPos(hControlPanel, nullptr, newLeft, r.top, w, h, SWP_NOZORDER);
+        }
+        
         InvalidateRect(hControlPanel, nullptr, FALSE);
     }
 }
