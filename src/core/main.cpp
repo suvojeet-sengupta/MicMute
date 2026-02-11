@@ -907,13 +907,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             else if (wmId == ID_AUTO_RECORD_CALLS) {
                 // Security Check
                 if (!autoRecordCalls) { // If turning ON
-                    if (!hasAgreedToDisclaimer) {
-                        if (!ShowDisclaimerDialog(hWnd)) {
-                            return 0; // Declined
-                        }
-                        hasAgreedToDisclaimer = true;
-                        SaveSettings();
+                    // Always show disclaimer when enabling (User Request)
+                    if (!ShowDisclaimerDialog(hWnd)) {
+                        return 0; // Declined
                     }
+                    // We don't save 'true' here yet. We wait until password success.
                 }
 
                 // Password Protection for ANY toggle (On or Off)
@@ -922,6 +920,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
 
                 autoRecordCalls = !autoRecordCalls;
+                
+                // Update agreement flag to match state
+                hasAgreedToDisclaimer = autoRecordCalls;
+                
                 SaveSettings();
                 if (g_CallRecorder) {
                     if (autoRecordCalls) g_CallRecorder->Enable();
