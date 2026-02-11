@@ -5,6 +5,7 @@
 static bool disclaimerAgreed = false;
 static bool dHoverAgree = false;
 static bool dHoverDecline = false;
+static const char* currentDisclaimerText = nullptr;
 
 // Theme colors
 static const COLORREF kDiscBg       = RGB(22, 22, 35);
@@ -108,7 +109,9 @@ static LRESULT CALLBACK DisclaimerDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LP
             SelectObject(mem, hFontSmall ? hFontSmall : (HFONT)GetStockObject(DEFAULT_GUI_FONT));
             SetTextColor(mem, kDiscText);
             RECT rcBody = { 30, 82, rc.right - 30, rc.bottom - 68 };
-            DrawText(mem, kDisclaimerText, -1, &rcBody, DT_WORDBREAK | DT_LEFT);
+            if (currentDisclaimerText) {
+                DrawText(mem, currentDisclaimerText, -1, &rcBody, DT_WORDBREAK | DT_LEFT);
+            }
 
             // Buttons
             RECT rcAgree, rcDecline;
@@ -212,10 +215,12 @@ static LRESULT CALLBACK DisclaimerDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LP
     return 0;
 }
 
-bool ShowDisclaimerDialog(HWND hParent) {
+
+bool ShowDisclaimerDialog(HWND hParent, const char* customText) {
     disclaimerAgreed = false;
     dHoverAgree = false;
     dHoverDecline = false;
+    currentDisclaimerText = customText ? customText : kDisclaimerText;
 
     WNDCLASSEX wc = {0};
     wc.cbSize = sizeof(WNDCLASSEX);

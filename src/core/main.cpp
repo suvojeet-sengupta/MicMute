@@ -892,9 +892,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             else if (wmId == ID_SHOW_RECORDER) {
                 // Remapped to: Show Recorder Status + Manual Rec in Panel
+                // Check if enabling
+                if (!showRecStatus) {
+                    const char* manualDisclaimer = 
+                        "Manual Recording captures both system audio and microphone input.\n\n"
+                        "By enabling this, you are responsible for notifying all parties if required by law. "
+                        "Unauthorized recording may violate privacy laws.";
+                    
+                    if (!ShowDisclaimerDialog(hWnd, manualDisclaimer)) {
+                        return 0; // Declined
+                    }
+                }
+
+                // Password Protection
+                if (!PromptForPassword(hWnd)) {
+                    return 0; 
+                }
+
                 bool newState = !showRecStatus; 
                 showRecStatus = newState;
                 showManualRec = newState;
+                
+                // Update agreement flag
+                hasAgreedToManualDisclaimer = showRecStatus;
+
                 SaveSettings();
                 UpdateControlPanel();
                 InvalidateRect(hRecorderCheck, nullptr, FALSE);
@@ -975,8 +996,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 UpdateControlPanel();
                 InvalidateRect(hHideCallStats, nullptr, FALSE);
             }
+
             else if (wmId == ID_HIDE_MANUAL_REC) {
+                // Check if enabling
+                if (!showManualRec) {
+                    const char* manualDisclaimer = 
+                        "Manual Recording captures both system audio and microphone input.\n\n"
+                        "By enabling this, you are responsible for notifying all parties if required by law. "
+                        "Unauthorized recording may violate privacy laws.";
+                    
+                    if (!ShowDisclaimerDialog(hWnd, manualDisclaimer)) {
+                        return 0; // Declined
+                    }
+                }
+
+                // Password Protection
+                if (!PromptForPassword(hWnd)) {
+                    return 0; 
+                }
+
                 showManualRec = !showManualRec;
+                
+                // Update agreement flag
+                hasAgreedToManualDisclaimer = showManualRec;
+
                 SaveSettings();
                 UpdateControlPanel();
                 InvalidateRect(hHideManualRec, nullptr, FALSE);

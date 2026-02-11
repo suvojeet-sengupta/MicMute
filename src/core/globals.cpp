@@ -30,15 +30,16 @@ bool beepOnCall = true;
 // We use stringization to safely handle backslashes in passwords
 const char* APP_PASSWORD = STRINGIZE(APP_PASSWORD_SECRET);
 bool hasAgreedToDisclaimer = false;
+bool hasAgreedToManualDisclaimer = false;
 int autoDeleteDays = 0; // 0 = Never delete
 int scrollY = 0;
 
 // Control Panel visibility (all visible by default)
 bool showMuteBtn = true;
 bool showVoiceMeter = true;
-bool showRecStatus = true;
+bool showRecStatus = false;
 bool showCallStats = true;
-bool showManualRec = true;
+bool showManualRec = false;
 
 // Panel size mode (0=Compact, 1=Normal, 2=Wide)
 int panelSizeMode = 1;

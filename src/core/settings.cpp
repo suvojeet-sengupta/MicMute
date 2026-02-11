@@ -77,6 +77,9 @@ void SaveSettings() {
         val = hasAgreedToDisclaimer ? 1 : 0;
         RegSetValueEx(hKey, "DisclaimerAgreed", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
         
+        val = hasAgreedToManualDisclaimer ? 1 : 0;
+        RegSetValueEx(hKey, "ManualDisclaimerAgreed", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+        
         val = (DWORD)autoDeleteDays;
         RegSetValueEx(hKey, "AutoDeleteDays", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
         
@@ -144,6 +147,8 @@ void LoadSettings() {
             beepOnCall = val != 0;
         if (RegQueryValueEx(hKey, "DisclaimerAgreed", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             hasAgreedToDisclaimer = val != 0;
+        if (RegQueryValueEx(hKey, "ManualDisclaimerAgreed", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            hasAgreedToManualDisclaimer = val != 0;
         if (RegQueryValueEx(hKey, "AutoDeleteDays", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             autoDeleteDays = (int)val;
         

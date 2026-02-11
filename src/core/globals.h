@@ -27,6 +27,7 @@ extern bool autoRecordCalls;
 extern bool beepOnCall;
 extern const char* APP_PASSWORD;
 extern bool hasAgreedToDisclaimer;
+extern bool hasAgreedToManualDisclaimer;
 extern int autoDeleteDays;
 extern int scrollY; // Vertical scroll position for General tab
 
