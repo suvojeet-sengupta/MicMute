@@ -31,6 +31,10 @@
 #define ID_SIZE_NORMAL       1031
 #define ID_SIZE_WIDE         1032
 
+// Auto-delete combo
+#define ID_AUTO_DELETE_COMBO  1040
+#define ID_AUTO_DELETE_LABEL  1041
+
 #define WM_TRAYICON (WM_USER + 1)
 #define WM_APP_MUTE_CHANGED (WM_APP + 100)
 

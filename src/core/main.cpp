@@ -32,6 +32,7 @@
 #include "ui/control_panel.h"
 #include "network/updater.h"
 #include "ui/password_dialog.h"
+#include "ui/disclaimer_dialog.h"
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -75,6 +76,8 @@ bool isPressedMin = false;
 // General Tab Controls
 HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck, hNotifyCheck, hAutoRecordCheck;
 HWND hBeepCheck;
+HWND hAutoDeleteLabel = nullptr, hAutoDeleteCombo = nullptr;
+static HBRUSH hComboEditBrush = nullptr;
 
 // Hide/Unhide Tab Controls
 HWND hHideMuteBtn, hHideVoiceMeter, hHideRecStatus, hHideCallStats, hHideManualRec;
@@ -86,20 +89,52 @@ HWND hSizeCompact, hSizeNormal, hSizeWide;
 constexpr std::array<const char*, 4> tabNames = { "General", "Hide/Unhide", "Shape & Size", "Appearance" };
 constexpr int TAB_COUNT = 4;
 
-void UpdateControlVisibility() {
+// Helper: Update layout of controls based on tab and scroll
+void UpdateLayout(HWND hWnd) {
+    RECT rcClient;
+    GetClientRect(hWnd, &rcClient);
+    int contentW = rcClient.right - SIDEBAR_WIDTH;
+    int contentX = SIDEBAR_WIDTH + 40;
+    int startY = 100 - scrollY;
+    int gapY = 50;
+
     bool isGeneral = (currentTab == 0);
     bool isHide = (currentTab == 1);
     bool isSize = (currentTab == 2);
     
+    // General Tab
     int showGeneral = isGeneral ? SW_SHOW : SW_HIDE;
-    ShowWindow(hStartupCheck, showGeneral);
-    ShowWindow(hOverlayCheck, showGeneral);
-    ShowWindow(hMeterCheck, showGeneral);
-    ShowWindow(hRecorderCheck, showGeneral);
-    ShowWindow(hNotifyCheck, showGeneral);
-    ShowWindow(hAutoRecordCheck, showGeneral);
-    if (hBeepCheck) ShowWindow(hBeepCheck, showGeneral);
     
+    auto MoveAndShow = [&](HWND h, int x, int y, int w, int hH) {
+        if (!h) return;
+        if (isGeneral) {
+            MoveWindow(h, x, y, w, hH, TRUE);
+            ShowWindow(h, SW_SHOW);
+        } else {
+            ShowWindow(h, SW_HIDE);
+        }
+    };
+
+    MoveAndShow(hStartupCheck, contentX, startY, 300, 30);
+    MoveAndShow(hOverlayCheck, contentX, startY + gapY, 300, 30);
+    MoveAndShow(hMeterCheck, contentX, startY + gapY*2, 300, 30);
+    MoveAndShow(hRecorderCheck, contentX, startY + gapY*3, 300, 30);
+    MoveAndShow(hNotifyCheck, contentX, startY + gapY*4, 300, 30);
+    MoveAndShow(hAutoRecordCheck, contentX, startY + gapY*5, 350, 30);
+    if (hBeepCheck) MoveAndShow(hBeepCheck, contentX, startY + gapY*6, 350, 30);
+    
+    // Auto-Delete (Gap 7)
+    if (hAutoDeleteLabel) MoveAndShow(hAutoDeleteLabel, contentX, startY + gapY*7 + 4, 200, 20);
+    if (hAutoDeleteCombo) MoveAndShow(hAutoDeleteCombo, contentX + 205, startY + gapY*7, 120, 200);
+
+    // Extension Status (Gap 8) - Fixed garbled text ID 9998
+    HWND hExtStatus = GetDlgItem(hWnd, 9998);
+    if (hExtStatus) MoveAndShow(hExtStatus, contentX, startY + gapY*8 + 8, 350, 20);
+
+    // Check Updates (Gap 9)
+    HWND hUpdateBtn = GetDlgItem(hWnd, ID_CHECK_UPDATE);
+    if (hUpdateBtn) MoveAndShow(hUpdateBtn, contentX, startY + gapY*9, 160, 30);
+
     // Hide/Unhide tab
     int showHide = isHide ? SW_SHOW : SW_HIDE;
     if (hHideMuteBtn) ShowWindow(hHideMuteBtn, showHide);
@@ -114,7 +149,7 @@ void UpdateControlVisibility() {
     if (hSizeNormal) ShowWindow(hSizeNormal, showSize);
     if (hSizeWide) ShowWindow(hSizeWide, showSize);
     
-    InvalidateRect(hMainWnd, nullptr, TRUE);
+    InvalidateRect(hWnd, nullptr, TRUE);
 }
 
 // Helper: Resize control panel based on current mode
@@ -373,16 +408,48 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
                 contentX, startY + gapY*6, 350, 30, hWnd, (HMENU)ID_BEEP_ON_CALL, hInst, nullptr);
             SendMessage(hBeepCheck, BM_SETCHECK, beepOnCall ? BST_CHECKED : BST_UNCHECKED, 0);
+
+            // Auto-delete label
+            hAutoDeleteLabel = CreateWindow("STATIC", "Auto-delete recordings after:", 
+                WS_CHILD | WS_VISIBLE | SS_LEFT, 
+                contentX, startY + gapY*7 + 4, 200, 20, hWnd, (HMENU)ID_AUTO_DELETE_LABEL, hInst, nullptr);
+
+            // Auto-delete combo box
+            hAutoDeleteCombo = CreateWindow("COMBOBOX", "",
+                WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
+                contentX + 205, startY + gapY*7, 120, 200, hWnd, (HMENU)ID_AUTO_DELETE_COMBO, hInst, nullptr);
+            
+            // Populate combo
+            SendMessage(hAutoDeleteCombo, CB_ADDSTRING, 0, (LPARAM)"Never");
+            SendMessage(hAutoDeleteCombo, CB_ADDSTRING, 0, (LPARAM)"7 days");
+            SendMessage(hAutoDeleteCombo, CB_ADDSTRING, 0, (LPARAM)"14 days");
+            SendMessage(hAutoDeleteCombo, CB_ADDSTRING, 0, (LPARAM)"30 days");
+            SendMessage(hAutoDeleteCombo, CB_ADDSTRING, 0, (LPARAM)"60 days");
+            SendMessage(hAutoDeleteCombo, CB_ADDSTRING, 0, (LPARAM)"90 days");
+
+            // Select current value
+            int comboIdx = 0;
+            if (autoDeleteDays == 7) comboIdx = 1;
+            else if (autoDeleteDays == 14) comboIdx = 2;
+            else if (autoDeleteDays == 30) comboIdx = 3;
+            else if (autoDeleteDays == 60) comboIdx = 4;
+            else if (autoDeleteDays == 90) comboIdx = 5;
+            SendMessage(hAutoDeleteCombo, CB_SETCURSEL, comboIdx, 0);
+
+            if (hFontSmall) {
+                SendMessage(hAutoDeleteLabel, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
+                SendMessage(hAutoDeleteCombo, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
+            }
             
             // Extension status
             CreateWindow("STATIC", "", 
                 WS_CHILD | SS_LEFT, 
-                contentX, startY + gapY*7, 350, 20, hWnd, (HMENU)9998, hInst, nullptr);
+                contentX, startY + gapY*8 + 8, 350, 20, hWnd, (HMENU)9998, hInst, nullptr);
 
             // Check for Updates Button
             CreateWindow("BUTTON", "Check for Updates", 
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 
-                contentX, startY + gapY*8, 160, 30, hWnd, (HMENU)ID_CHECK_UPDATE, hInst, nullptr);
+                contentX, startY + gapY*9, 160, 30, hWnd, (HMENU)ID_CHECK_UPDATE, hInst, nullptr);
 
             // === Hide/Unhide Tab Toggles ===
             hHideMuteBtn = CreateWindow("BUTTON", "Mute/Unmute Button",
@@ -425,8 +492,84 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             CreateWindow("STATIC", "by Suvojeet Sengupta", 
                  WS_VISIBLE | WS_CHILD | SS_RIGHT, 0, 0, 0, 0, hWnd, (HMENU)9999, hInst, nullptr);
 
-            UpdateControlVisibility();
+            UpdateLayout(hWnd);
             break;
+        }
+
+        case WM_SIZE: {
+            RECT rc; GetClientRect(hWnd, &rc);
+            int clientH = rc.bottom;
+            // Approx content height: 100 + 50*11 = 650
+            int contentH = 650; 
+            
+            SCROLLINFO si = {0};
+            si.cbSize = sizeof(SCROLLINFO);
+            si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+            si.nMin = 0;
+            si.nMax = contentH;
+            si.nPage = clientH;
+            si.nPos = scrollY;
+            SetScrollInfo(hWnd, SB_VERT, &si, TRUE);
+            
+            ResizeControlPanel();
+            UpdateLayout(hWnd);
+
+            HWND hFooter = GetDlgItem(hWnd, 9999);
+            if (hFooter) {
+                MoveWindow(hFooter, rc.right - 160, rc.bottom - 40, 140, 20, TRUE);
+            }
+            InvalidateRect(hWnd, nullptr, TRUE);
+            break;
+        }
+
+        case WM_VSCROLL: {
+            SCROLLINFO si = {0};
+            si.cbSize = sizeof(SCROLLINFO);
+            si.fMask = SIF_ALL;
+            GetScrollInfo(hWnd, SB_VERT, &si);
+            int oldY = scrollY;
+            
+            switch (LOWORD(wParam)) {
+                case SB_TOP: si.nPos = si.nMin; break;
+                case SB_BOTTOM: si.nPos = si.nMax; break;
+                case SB_LINEUP: si.nPos -= 20; break;
+                case SB_LINEDOWN: si.nPos += 20; break;
+                case SB_PAGEUP: si.nPos -= si.nPage; break;
+                case SB_PAGEDOWN: si.nPos += si.nPage; break;
+                case SB_THUMBTRACK: si.nPos = si.nTrackPos; break;
+            }
+            
+            // Clamp
+            int maxPos = si.nMax - (int)si.nPage + 1;
+            if (maxPos < 0) maxPos = 0;
+            if (si.nPos < 0) si.nPos = 0;
+            if (si.nPos > maxPos) si.nPos = maxPos;
+            
+            scrollY = si.nPos;
+            SetScrollPos(hWnd, SB_VERT, scrollY, TRUE);
+            
+            if (scrollY != oldY) UpdateLayout(hWnd);
+            break;
+        }
+        
+        case WM_MOUSEWHEEL: {
+            int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+            int scrollLines = 3; 
+            SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
+            
+            int oldY = scrollY;
+            scrollY -= delta / 120 * 20 * scrollLines; 
+            
+            RECT rc; GetClientRect(hWnd, &rc);
+            int contentH = 650;
+            int maxPos = contentH - rc.bottom + 1;
+            if (maxPos < 0) maxPos = 0;
+            if (scrollY < 0) scrollY = 0;
+            if (scrollY > maxPos) scrollY = maxPos;
+            
+            SetScrollPos(hWnd, SB_VERT, scrollY, TRUE);
+            if (scrollY != oldY) UpdateLayout(hWnd);
+            return 0;
         }
 
         case WM_PAINT: {
@@ -496,7 +639,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (currentTab == 3) {
                 SetTextColor(hdc, colorTextDim);
                 SelectObject(hdc, hFontTitle);
-                RECT rcContent = {SIDEBAR_WIDTH, 150, rcClient.right, 250};
+                RECT rcContent = {SIDEBAR_WIDTH, 150 - scrollY, rcClient.right, 250 - scrollY};
                 DrawText(hdc, "Coming Soon", -1, &rcContent, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
             }
 
@@ -505,7 +648,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 SetTextColor(hdc, colorTextDim);
                 SelectObject(hdc, hFontSmall);
                 int contentX = SIDEBAR_WIDTH + 40;
-                RECT rcHint = {contentX, 75, rcClient.right - 40, 95};
+                RECT rcHint = {contentX, 75 - scrollY, rcClient.right - 40, 95 - scrollY};
                 DrawText(hdc, "Toggle which sections appear on the control panel:", -1, &rcHint, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
             }
 
@@ -514,14 +657,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 SetTextColor(hdc, colorTextDim);
                 SelectObject(hdc, hFontSmall);
                 int contentX = SIDEBAR_WIDTH + 40;
-                RECT rcHint = {contentX, 75, rcClient.right - 40, 95};
+                RECT rcHint = {contentX, 75 - scrollY, rcClient.right - 40, 95 - scrollY};
                 DrawText(hdc, "Choose control panel size:", -1, &rcHint, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
 
                 // Show current selection indicator
                 SetTextColor(hdc, colorAccent);
                 SelectObject(hdc, hFontSmall);
                 const char* curSize = panelSizeMode == 0 ? "Current: Compact" : (panelSizeMode == 2 ? "Current: Wide" : "Current: Normal");
-                RECT rcCur = {contentX, 145, rcClient.right - 40, 165};
+                RECT rcCur = {contentX, 145 - scrollY, rcClient.right - 40, 165 - scrollY};
                 DrawText(hdc, curSize, -1, &rcCur, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
             }
 
@@ -530,7 +673,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 SetTextColor(hdc, colorAccent);
                 SelectObject(hdc, hFontNormal);
                 int contentX = SIDEBAR_WIDTH + 40;
-                int statsY = 100 + 50 * 7; // Below all toggles
+                int statsY = 100 + 50 * 10 - scrollY;
 
                 auto t = std::time(nullptr);
                 struct tm tm;
@@ -582,6 +725,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             EndPaint(hWnd, &ps);
             return 0;
+        }
+
+        case WM_CTLCOLOREDIT: // For Combo Box Edit (though it's droplist, sometimes needs this)
+        case WM_CTLCOLORLISTBOX: {
+            HDC hdcCtl = (HDC)wParam;
+            SetTextColor(hdcCtl, colorText);
+            SetBkColor(hdcCtl, RGB(30, 30, 40)); 
+            if (!hComboEditBrush) hComboEditBrush = CreateSolidBrush(RGB(30, 30, 40));
+            return (LRESULT)hComboEditBrush;
+        }
+
+        case WM_CTLCOLORSTATIC: {
+            HDC hdcStatic = (HDC)wParam;
+            SetTextColor(hdcStatic, colorText);
+            SetBkMode(hdcStatic, TRANSPARENT);
+            return (LRESULT)GetStockObject(NULL_BRUSH); // Parent sends WM_ERASEBKGND/Paint
         }
 
         case WM_DRAWITEM: {
@@ -674,7 +833,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     int itemBottom = itemTop + SIDEBAR_ITEM_HEIGHT;
                     if (y >= itemTop && y < itemBottom) {
                         currentTab = i;
-                        UpdateControlVisibility();
+                        UpdateLayout(hWnd);
                         InvalidateRect(hWnd, nullptr, TRUE); 
                         break;
                     }
@@ -706,14 +865,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             RECT rcBtns = {rcMin.left, 0, rcClose.right, rcClose.bottom};
             InvalidateRect(hWnd, &rcBtns, FALSE);
             break;
-        }
-
-        case WM_CTLCOLORSTATIC: {
-            HDC hdc = (HDC)wParam;
-            SetBkColor(hdc, colorBg);
-            SetTextColor(hdc, colorTextDim);
-            SelectObject(hdc, hFontSmall);
-            return (LRESULT)hBrushBg;
         }
 
         case WM_COMMAND: {
@@ -757,17 +908,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 // Security Check
                 if (!autoRecordCalls) { // If turning ON
                     if (!hasAgreedToDisclaimer) {
-                        int ret = MessageBox(hWnd, 
-                            "LEGAL DISCLAIMER:\n\n"
-                            "Call recording laws vary by jurisdiction. In many areas, you must notify all parties "
-                            "that the call is being recorded. By enabling this feature, you acknowledge that you "
-                            "understand and will comply with all applicable local, state, and federal laws regarding "
-                            "call recording.\n\n"
-                            "Do you agree to these terms?", 
-                            "Legal Warning", MB_YESNO | MB_ICONWARNING);
-                        
-                        if (ret != IDYES) return 0;
-                        
+                        if (!ShowDisclaimerDialog(hWnd)) {
+                            return 0; // Declined
+                        }
                         hasAgreedToDisclaimer = true;
                         SaveSettings();
                     }
@@ -790,6 +933,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 beepOnCall = !beepOnCall;
                 SaveSettings();
                 InvalidateRect(hBeepCheck, nullptr, FALSE);
+            }
+            else if (wmId == ID_AUTO_DELETE_COMBO && HIWORD(wParam) == CBN_SELCHANGE) {
+                int idx = (int)SendMessage(hAutoDeleteCombo, CB_GETCURSEL, 0, 0);
+                switch (idx) {
+                    case 0: autoDeleteDays = 0; break;
+                    case 1: autoDeleteDays = 7; break;
+                    case 2: autoDeleteDays = 14; break;
+                    case 3: autoDeleteDays = 30; break;
+                    case 4: autoDeleteDays = 60; break;
+                    case 5: autoDeleteDays = 90; break;
+                    default: autoDeleteDays = 0; break;
+                }
+                SaveSettings();
+                // Trigger cleanup immediately? Maybe not, let the timer do it next cycle or on restart.
             }
             // Hide/Unhide tab toggles
             else if (wmId == ID_HIDE_MUTE_BTN) {
@@ -880,16 +1037,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
         }
 
-        case WM_SIZE: {
-            RECT rcClient;
-            GetClientRect(hWnd, &rcClient);
-            HWND hFooter = GetDlgItem(hWnd, 9999);
-            if (hFooter) {
-                MoveWindow(hFooter, rcClient.right - 160, rcClient.bottom - 40, 140, 20, TRUE);
-            }
-            InvalidateRect(hWnd, nullptr, TRUE);
-            break;
-        }
 
         case WM_TIMER:
             if (wParam == 1) {
@@ -911,7 +1058,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         if (IsExtensionConnected()) {
                             SetWindowText(hStatus, "✓ Extension Connected");
                         } else {
-                            SetWindowText(hStatus, "⏳ Waiting for Extension...");
+                            SetWindowText(hStatus, "Waiting for Extension...");
                         }
                     }
                 } else {

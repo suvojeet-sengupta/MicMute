@@ -28,6 +28,7 @@ extern bool beepOnCall;
 extern const char* APP_PASSWORD;
 extern bool hasAgreedToDisclaimer;
 extern int autoDeleteDays;
+extern int scrollY; // Vertical scroll position for General tab
 
 // Control Panel visibility toggles
 extern bool showMuteBtn;

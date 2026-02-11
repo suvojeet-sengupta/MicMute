@@ -31,6 +31,7 @@ bool beepOnCall = true;
 const char* APP_PASSWORD = STRINGIZE(APP_PASSWORD_SECRET);
 bool hasAgreedToDisclaimer = false;
 int autoDeleteDays = 0; // 0 = Never delete
+int scrollY = 0;
 
 // Control Panel visibility (all visible by default)
 bool showMuteBtn = true;

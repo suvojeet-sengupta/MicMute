@@ -30,6 +30,10 @@ static bool cpDragging = false;
 static POINT cpDragStart = {0, 0};
 static POINT cpClickStart = {0, 0};
 
+// Hover state
+static int cpHoverItem = -1; // -1: None, 0: Mute, 1: RecStart, 2: RecStop, 3: Folder, 4: Settings
+
+
 // Notification for saved recordings
 static std::string cpLastSavedFile;
 static DWORD cpSavedNotifyTime = 0;
@@ -140,6 +144,14 @@ static void DrawMuteButton(HDC hdc, RECT area, bool isMuted) {
         const char* label = isMuted ? "M" : "L";
         RECT tr = area;
         DrawText(hdc, label, -1, &tr, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+    }
+
+    if (cpHoverItem == 0) {
+        // Tooltip
+        SetTextColor(hdc, colorTextDim);
+        SelectObject(hdc, hFontSmall);
+        RECT rcTip = {area.left, area.bottom - 10, area.right, area.bottom + 4};
+        DrawText(hdc, isMuted ? "Unmute" : "Mute", -1, &rcTip, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
     }
 }
 
@@ -406,9 +418,21 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     if (IsExtensionConnected()) {
                         SetTextColor(mem, RGB(100, 180, 255));
                         DrawText(mem, "Auto: Ready", -1, &statusRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                        
+                        // Green status dot
+                        HBRUSH dotBr = CreateSolidBrush(RGB(50, 220, 80));
+                        RECT rcDot = {statusRect.left + 70, statusRect.top + 8, statusRect.left + 76, statusRect.top + 14};
+                        FillRect(mem, &rcDot, dotBr);
+                        DeleteObject(dotBr);
                     } else {
                         SetTextColor(mem, RGB(255, 165, 60));
                         DrawText(mem, "Waiting Ext...", -1, &statusRect, DT_SINGLELINE | DT_VCENTER | DT_LEFT);
+                        
+                        // Red/Orange status dot
+                        HBRUSH dotBr = CreateSolidBrush(RGB(255, 100, 50));
+                        RECT rcDot = {statusRect.left + 80, statusRect.top + 8, statusRect.left + 86, statusRect.top + 14};
+                        FillRect(mem, &rcDot, dotBr);
+                        DeleteObject(dotBr);
                     }
                 } else {
                     SetTextColor(mem, colorTextDim);
@@ -444,12 +468,26 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                         RECT r2 = {cx + 2, cy - 6, cx + 5, cy + 6};
                         FillRect(mem, &r1, shapeBr);
                         FillRect(mem, &r2, shapeBr);
+                        
+                        if (cpHoverItem == 1) { // Tooltip
+                            SetTextColor(mem, colorTextDim);
+                            SelectObject(mem, hFontSmall);
+                            RECT rcTip = {rc.left, rc.bottom, rc.right, rc.bottom + 12};
+                            DrawText(mem, "Pause", -1, &rcTip, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+                        }
                     } else {
                         // Play triangle
                         POINT pts[3] = {{cx - 4, cy - 6}, {cx - 4, cy + 6}, {cx + 5, cy}};
                         HRGN rgn = CreatePolygonRgn(pts, 3, WINDING);
                         FillRgn(mem, rgn, shapeBr);
                         DeleteObject(rgn);
+
+                        if (cpHoverItem == 1) { // Tooltip
+                            SetTextColor(mem, colorTextDim);
+                            SelectObject(mem, hFontSmall);
+                            RECT rcTip = {rc.left, rc.bottom, rc.right, rc.bottom + 12};
+                            DrawText(mem, "Rec", -1, &rcTip, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+                        }
                     }
                     DeleteObject(shapeBr);
                     drawX += btnW + 4;
@@ -501,6 +539,17 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 drawX += margin;
             }
 
+            // Separator between manual rec and call stats
+            if (showManualRec && showCallStats) {
+                 // Gradient Separator
+                for(int i=6; i<panelH-6; i++) {
+                    int alpha = 255 - abs(i - panelH/2) * 5;
+                    if(alpha < 0) alpha = 0;
+                    SetPixel(mem, drawX, i, RGB(60, 60, 80));
+                }
+                drawX += margin;
+            }
+
             // === Section 5: Call Stats ===
             if (showCallStats) {
                 std::string stats = GetCallStatsString();
@@ -538,6 +587,10 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 RECT rc = {drawX, bY, drawX + btnW, bY + btnH};
 
                 HBRUSH br = CreateSolidBrush(RGB(45, 45, 60));
+                if (cpHoverItem == 4) {
+                    DeleteObject(br);
+                    br = CreateSolidBrush(RGB(65, 65, 85)); // Lighter on hover
+                }
                 FillRect(mem, &rc, br);
                 DeleteObject(br);
 
@@ -580,9 +633,11 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             return 0;
         }
 
-        case WM_LBUTTONDOWN: {
+        case WM_MOUSEMOVE: {
             int x = LOWORD(lParam);
             int y = HIWORD(lParam);
+            
+            // Re-calculate layout to find what we are hovering over
             int panelH = 0;
             {
                 RECT r; GetClientRect(hWnd, &r);
@@ -590,9 +645,86 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             }
             int margin = 8;
             int drawX = margin;
-            bool isMuted = IsDefaultMicMuted();
+            
+            int newHover = -1;
 
-            // Check mute button click
+            if (showMuteBtn) {
+                int btnSize = panelH - margin * 2;
+                if (x >= drawX && x <= drawX + btnSize && y >= margin && y <= panelH - margin) {
+                    newHover = 0;
+                }
+                drawX += btnSize + margin * 2; // + separator info
+            }
+            
+            if (showVoiceMeter) drawX += 120 + margin * 2;
+            if (showRecStatus) drawX += 140 + margin;
+            
+            if (showManualRec) {
+                int btnW = 28;
+                int bY = (panelH - btnW) / 2;
+                
+                // Start/Pause
+                if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) newHover = 1;
+                drawX += btnW + 4;
+                
+                // Stop
+                if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) newHover = 2;
+                drawX += btnW + 4;
+                
+                // Folder
+                if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) newHover = 3;
+                drawX += btnW + margin * 2; // + separator
+            }
+            
+            if (showCallStats) drawX += 100 + margin;
+            
+            // Settings
+            {
+                drawX += margin; // Separator
+                int btnW = 28;
+                int bY = (panelH - btnW) / 2;
+                if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) newHover = 4;
+            }
+
+            if (newHover != cpHoverItem) {
+                cpHoverItem = newHover;
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+
+            if (cpDragging) {
+                POINT pt; GetCursorPos(&pt);
+                SetWindowPos(hWnd, nullptr, pt.x - cpDragStart.x, pt.y - cpDragStart.y,
+                             0, 0, SWP_NOSIZE | SWP_NOZORDER);
+            }
+            
+            // Request mouse leave tracking
+            TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, hWnd, 0};
+            TrackMouseEvent(&tme);
+            
+            return 0;
+        }
+
+        case WM_MOUSELEAVE:
+            if (cpHoverItem != -1) {
+                cpHoverItem = -1;
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            return 0;
+
+        case WM_LBUTTONDOWN: {
+            int x = LOWORD(lParam);
+            int y = HIWORD(lParam);
+            
+            // Simple hit testing again for clicks
+            // (Duplicated layout math - ideally refactor into GetItemAt(x,y))
+             int panelH = 0;
+            {
+                RECT r; GetClientRect(hWnd, &r);
+                panelH = r.bottom;
+            }
+            int margin = 8;
+            int drawX = margin;
+
             if (showMuteBtn) {
                 int btnSize = panelH - margin * 2;
                 if (x >= drawX && x <= drawX + btnSize && y >= margin && y <= panelH - margin) {
@@ -602,71 +734,48 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 }
                 drawX += btnSize + margin * 2;
             }
-
-            // Check voice meter area (skip, just separator)
-            if (showVoiceMeter) {
-                drawX += 120 + margin * 2;
-            }
-
-            // Check recording status area (skip)
-            if (showRecStatus) {
-                drawX += 140 + margin;
-            }
-
-            // Check manual record buttons
+            
+            if (showVoiceMeter) drawX += 120 + margin * 2;
+            if (showRecStatus) drawX += 140 + margin;
+            
             if (showManualRec) {
                 int btnW = 28;
                 int bY = (panelH - btnW) / 2;
-
-                // Start/Pause
+                
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
                     HandleManualStartPause(hWnd);
-                    InvalidateRect(hWnd, nullptr, FALSE);
                     return 0;
                 }
                 drawX += btnW + 4;
-
-                // Stop
+                
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
                     HandleManualStop(hWnd);
-                    InvalidateRect(hWnd, nullptr, FALSE);
                     return 0;
                 }
                 drawX += btnW + 4;
-
-                // Folder
+                
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
                     extern void ChangeRecordingFolder(HWND parent);
                     ChangeRecordingFolder(hWnd);
                     return 0;
                 }
-                drawX += btnW + margin; // Folder width
-                
-                // Separator
-                drawX += margin;
+                drawX += btnW + margin * 2;
             }
-
-            // Check Call Stats (skip)
-            if (showCallStats) {
-                drawX += 100 + margin;
-            }
-
-            // Check Settings button click (Flow based)
+            
+            if (showCallStats) drawX += 100 + margin;
+            
+            // Settings
             {
-                // Separator
                 drawX += margin;
-
                 int btnW = 28;
                 int bY = (panelH - btnW) / 2;
-                
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
-                    if (hMainWnd) {
+                     if (hMainWnd) {
                         ShowWindow(hMainWnd, SW_RESTORE);
                         SetForegroundWindow(hMainWnd);
                     }
                     return 0;
                 }
-                drawX += btnW + margin;
             }
 
             // Fallthrough: start dragging
@@ -681,14 +790,6 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             }
             return 0;
         }
-
-        case WM_MOUSEMOVE:
-            if (cpDragging) {
-                POINT pt; GetCursorPos(&pt);
-                SetWindowPos(hWnd, nullptr, pt.x - cpDragStart.x, pt.y - cpDragStart.y,
-                             0, 0, SWP_NOSIZE | SWP_NOZORDER);
-            }
-            return 0;
 
         case WM_LBUTTONUP:
             if (cpDragging) {
