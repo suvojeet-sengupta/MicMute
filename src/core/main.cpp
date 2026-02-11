@@ -31,6 +31,7 @@
 #include "ui/ui_controls.h"
 #include "ui/control_panel.h"
 #include "network/updater.h"
+#include "ui/password_dialog.h"
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -753,6 +754,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 InvalidateRect((HWND)lParam, nullptr, FALSE);
             }
             else if (wmId == ID_AUTO_RECORD_CALLS) {
+                // Security Check
+                if (!autoRecordCalls) { // If turning ON
+                    if (!hasAgreedToDisclaimer) {
+                        int ret = MessageBox(hWnd, 
+                            "LEGAL DISCLAIMER:\n\n"
+                            "Call recording laws vary by jurisdiction. In many areas, you must notify all parties "
+                            "that the call is being recorded. By enabling this feature, you acknowledge that you "
+                            "understand and will comply with all applicable local, state, and federal laws regarding "
+                            "call recording.\n\n"
+                            "Do you agree to these terms?", 
+                            "Legal Warning", MB_YESNO | MB_ICONWARNING);
+                        
+                        if (ret != IDYES) return 0;
+                        
+                        hasAgreedToDisclaimer = true;
+                        SaveSettings();
+                    }
+                }
+
+                // Password Protection for ANY toggle (On or Off)
+                if (!PromptForPassword(hWnd)) {
+                    return 0; // Password incorrect or cancelled
+                }
+
                 autoRecordCalls = !autoRecordCalls;
                 SaveSettings();
                 if (g_CallRecorder) {

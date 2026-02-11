@@ -20,6 +20,18 @@ std::string userName = "Suvojeet Sengupta";
 bool autoRecordCalls = false;
 bool beepOnCall = true;
 
+#define STRINGIZE_HELPER(x) #x
+#define STRINGIZE(x) STRINGIZE_HELPER(x)
+
+#ifndef APP_PASSWORD_SECRET
+#define APP_PASSWORD_SECRET admin
+#endif
+
+// We use stringization to safely handle backslashes in passwords
+const char* APP_PASSWORD = STRINGIZE(APP_PASSWORD_SECRET);
+bool hasAgreedToDisclaimer = false;
+int autoDeleteDays = 0; // 0 = Never delete
+
 // Control Panel visibility (all visible by default)
 bool showMuteBtn = true;
 bool showVoiceMeter = true;

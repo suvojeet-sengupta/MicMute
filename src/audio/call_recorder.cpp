@@ -49,7 +49,73 @@ static bool CreateDirectoryIfNeeded(const std::string& path) {
     return CreateDirectoryA(path.c_str(), nullptr) != 0;
 }
 
-// Helper: Count .wav files in a directory
+// Helper: Delete directory recursively
+static void DeleteDirectory(const std::string& path) {
+    std::string searchPath = path + "\\*";
+    WIN32_FIND_DATA findData;
+    HANDLE hFind = FindFirstFile(searchPath.c_str(), &findData);
+    if (hFind == INVALID_HANDLE_VALUE) return;
+
+    do {
+        if (strcmp(findData.cFileName, ".") == 0 || strcmp(findData.cFileName, "..") == 0) continue;
+
+        std::string filePath = path + "\\" + findData.cFileName;
+        if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            DeleteDirectory(filePath);
+        } else {
+            DeleteFile(filePath.c_str());
+        }
+    } while (FindNextFile(hFind, &findData));
+    FindClose(hFind);
+
+    RemoveDirectory(path.c_str());
+}
+
+// Helper: Cleanup old recordings
+static void CleanupOldRecordings() {
+    if (autoDeleteDays <= 0 || recordingFolder.empty()) return;
+
+    time_t now = std::time(nullptr);
+    struct tm tmNow;
+    localtime_s(&tmNow, &now);
+    
+    // Approximate conversion
+    // We iterate folders in recordingFolder
+    std::string searchPath = recordingFolder + "\\*";
+    WIN32_FIND_DATA findData;
+    HANDLE hFind = FindFirstFile(searchPath.c_str(), &findData);
+    
+    if (hFind == INVALID_HANDLE_VALUE) return;
+
+    do {
+        if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (strcmp(findData.cFileName, ".") == 0 || strcmp(findData.cFileName, "..") == 0) continue;
+
+            // Check if folder name is YYYY-MM-DD
+            int year, month, day;
+            if (sscanf_s(findData.cFileName, "%d-%d-%d", &year, &month, &day) == 3) {
+                struct tm tmFolder = {0};
+                tmFolder.tm_year = year - 1900;
+                tmFolder.tm_mon = month - 1;
+                tmFolder.tm_mday = day;
+                tmFolder.tm_isdst = -1;
+                
+                time_t folderTime = mktime(&tmFolder);
+                if (folderTime != -1) {
+                    double diff = difftime(now, folderTime);
+                    int daysOld = (int)(diff / (60 * 60 * 24));
+                    
+                    if (daysOld > autoDeleteDays) {
+                        std::string path = recordingFolder + "\\" + findData.cFileName;
+                        DeleteDirectory(path);
+                    }
+                }
+            }
+        }
+    } while (FindNextFile(hFind, &findData));
+    FindClose(hFind);
+}
+
 static int CountRecordings(const std::string& folderPath) {
     if (folderPath.empty()) return 0;
     
@@ -101,6 +167,9 @@ void CallAutoRecorder::Enable() {
     // Reset date tracking
     currentDate = GetCurrentDateString();
     
+    // Cleanup old recordings if enabled
+    CleanupOldRecordings();
+    
     // Scan existing recordings for today
     std::string folder = GetCurrentDateFolder();
     todayCallCount = CountRecordings(folder);
@@ -125,11 +194,7 @@ void CallAutoRecorder::Disable() {
 void CallAutoRecorder::TransitionTo(State newState) {
     currentState = newState;
     
-    // Play beep if starting recording and enabled
-    if (newState == State::RECORDING && beepOnCall) {
-        // High pitch beep (750Hz) for 300ms 
-        Beep(750, 300);
-    }
+    // Beep is now handled in http_server.cpp (independent of recording)
 }
 
 void CallAutoRecorder::Poll() {
@@ -190,6 +255,11 @@ void CallAutoRecorder::OnSilenceTimeout() {
 void CallAutoRecorder::ForceStartRecording(const std::map<std::string, std::string>& metadata) {
     if (!pRecorder) return;
     
+    // IMPORTANT: Respect the user's "Auto Record" toggle.
+    // The HTTP server handles the "Beep" independently.
+    // Here we only proceed if recording is actually enabled.
+    if (!enabled) return; 
+
     // If already recording, do nothing
     if (currentState == State::RECORDING) return;
 

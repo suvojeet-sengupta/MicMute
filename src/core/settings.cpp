@@ -74,6 +74,12 @@ void SaveSettings() {
         val = beepOnCall ? 1 : 0;
         RegSetValueEx(hKey, "BeepOnCall", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
         
+        val = hasAgreedToDisclaimer ? 1 : 0;
+        RegSetValueEx(hKey, "DisclaimerAgreed", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+        
+        val = (DWORD)autoDeleteDays;
+        RegSetValueEx(hKey, "AutoDeleteDays", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+        
         // Control panel visibility toggles
         val = showMuteBtn ? 1 : 0;
         RegSetValueEx(hKey, "ShowMuteBtn", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
@@ -136,6 +142,10 @@ void LoadSettings() {
             autoRecordCalls = val != 0;
         if (RegQueryValueEx(hKey, "BeepOnCall", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             beepOnCall = val != 0;
+        if (RegQueryValueEx(hKey, "DisclaimerAgreed", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            hasAgreedToDisclaimer = val != 0;
+        if (RegQueryValueEx(hKey, "AutoDeleteDays", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            autoDeleteDays = (int)val;
         
         // Control panel visibility toggles (override legacy if present)
         size = sizeof(DWORD);

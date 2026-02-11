@@ -3,6 +3,7 @@
 #include "audio/recorder.h"
 #include <ws2tcpip.h>
 #include <thread>
+#include "core/globals.h"
 #include <atomic>
 
 #pragma comment(lib, "ws2_32.lib")
@@ -107,7 +108,10 @@ void HandleRequest(SOCKET client) {
     
     // Parse HTTP method and path
     char method[16], path[256];
-    sscanf(buffer, "%15s %255s", method, path);
+    if (sscanf_s(buffer, "%15s %255s", method, (unsigned)_countof(method), path, (unsigned)_countof(path)) != 2) {
+        closesocket(client);
+        return;
+    }
     
     // Handle CORS preflight
     if (strcmp(method, "OPTIONS") == 0) {
@@ -223,7 +227,7 @@ void InitHttpServer() {
     // Bind to localhost:9876
     sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    InetPton(AF_INET, "127.0.0.1", &serverAddr.sin_addr);
     serverAddr.sin_port = htons(HTTP_PORT);
     
     if (bind(serverSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
@@ -281,6 +285,13 @@ DWORD GetTimeSinceLastHeartbeat() {
 }
 
 void HttpForceStartRecording(const std::map<std::string, std::string>& metadata) {
+    // Current "Beep on Call" feature
+    // Play beep if enabled, regardless of whether recording is enabled or success
+    if (beepOnCall) {
+        // High pitch beep (750Hz) for 300ms 
+        Beep(750, 300);
+    }
+
     if (!g_CallRecorder) return;
     
     // Force the recorder to start recording immediately

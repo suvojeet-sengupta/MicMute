@@ -25,6 +25,9 @@ extern bool showRecorder;
 extern bool showNotifications;
 extern bool autoRecordCalls;
 extern bool beepOnCall;
+extern const char* APP_PASSWORD;
+extern bool hasAgreedToDisclaimer;
+extern int autoDeleteDays;
 
 // Control Panel visibility toggles
 extern bool showMuteBtn;
