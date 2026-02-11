@@ -52,12 +52,12 @@
 
         // Target the Left Side Panel (usually "Call details" inside "Inbound" or just the active call container)
         // Based on user description: "left side show hota hai call details"
-        
+
         // Strategy 1: Look for the specific "Call details" expansion panel or container
         // In Ozonetel Agent Toolbar, this is often in a specific left column or tab
         const callDetailsHeaders = Array.from(document.querySelectorAll('.card-header, .accordion-toggle, h4, h5'));
         let detailsContainer = null;
-        
+
         for (const header of callDetailsHeaders) {
             if (header.innerText.includes('Call details') || header.innerText.includes('IncomingCall')) {
                 // Find the parent or associated content container
@@ -77,7 +77,7 @@
         if (!detailsContainer) {
             detailsContainer = document.querySelector('#left-panel, .left-pane, .sidebar-left');
         }
-        
+
         // If still nothing, fallback to body (but be careful of noise)
         const range = detailsContainer || document.body;
 
@@ -86,33 +86,47 @@
         // 1. <label>Key:</label> <span>Value</span>
         // 2. <div><span class="label">Key</span> <span class="value">Value</span></div>
         // 3. Grid: <div>Key</div> <div>Value</div>
-        
+
         // Let's try text parsing of lines first as it's often most robust for simple key:value lists
-        const textLines = range.innerText.split('\n');
-        
-        textLines.forEach(line => {
+        const textLines = range.innerText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+        for (let i = 0; i < textLines.length; i++) {
+            let line = textLines[i];
+
             // Check for Key: Value format
             const separatorIndex = line.indexOf(':');
             if (separatorIndex > 0 && separatorIndex < line.length - 1) {
                 let key = line.substring(0, separatorIndex).trim();
                 let value = line.substring(separatorIndex + 1).trim();
-                
-                // Clean up key (remove extra chars)
-                key = key.replace(/^[:\-\s]+|[:\-\s]+$/g, '');
-                
-                // Filter out likely non-fields
-                if (key.length > 2 && key.length < 50 && value.length > 0) {
-                     // Check for common fields we definitely want
-                     if (['UCID', 'Monitor UCID', 'Campaign', 'Agent ID', 'Skill Name', 'Call Details', 'Caller ID', 'Phone'].includes(key)) {
-                         details[key] = value;
-                     } 
-                     // Or just capture everything that looks like a field
-                     else if (!details[key] && !key.includes('Time') && !value.includes('Disconnect')) {
-                         details[key] = value;
-                     }
+
+                // Save if looks valid
+                if (isValidKey(key)) details[key] = value;
+            }
+            // Check for Key (newline) Value format
+            else if (separatorIndex === line.length - 1 || isValidKey(line.replace(':', ''))) {
+                // This line is a key, next line is likely value
+                let key = line.replace(':', '').trim();
+
+                // Look ahead for value
+                if (i + 1 < textLines.length) {
+                    let value = textLines[i + 1];
+
+                    // Verify next line isn't another key (heuristic)
+                    if (!isValidKey(value.replace(':', ''))) {
+                        details[key] = value;
+                        // Skip next line since we consumed it
+                        if (!value.includes(':')) i++;
+                    }
                 }
             }
-        });
+        }
+
+        // Helper to define what we consider a "Field Key"
+        function isValidKey(k) {
+            const knownKeys = ['UCID', 'Monitor UCID', 'Campaign', 'Agent ID', 'Agent Number', 'Skill Name', 'Skill', 'Call Details', 'Caller ID', 'Phone', 'Process'];
+            // Check exact match or starts with known key
+            return knownKeys.some(known => k.toLowerCase() === known.toLowerCase() || k.toLowerCase().startsWith(known.toLowerCase()));
+        }
 
         // Specific Selector back-up for UCID if missed by text parsing
         if (!details['UCID']) {
@@ -127,8 +141,8 @@
 
         // Specific Selector for Campaign
         if (!details['Campaign']) {
-             const campEl = document.querySelector('[id*="campaign" i], [class*="campaign" i]');
-             if (campEl) details['Campaign'] = campEl.innerText.trim();
+            const campEl = document.querySelector('[id*="campaign" i], [class*="campaign" i]');
+            if (campEl) details['Campaign'] = campEl.innerText.trim();
         }
 
         console.log('[MicMute Connector] Scraped Details:', details);

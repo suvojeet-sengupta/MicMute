@@ -824,7 +824,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             else if (wmId == ID_CHECK_UPDATE) {
                 AutoUpdater::CheckForUpdateAsync(false); // Not silent = show dialogs
             }
-            }
+
             else if (wmId == ID_TRAY_EXIT) {
                 if (hOverlayWnd) DestroyWindow(hOverlayWnd);
                 if (hMeterWnd) DestroyWindow(hMeterWnd);
