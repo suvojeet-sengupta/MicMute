@@ -98,3 +98,6 @@ extern POINT meterDragStart;
 
 // DPI Helper
 float GetWindowScale(HWND hWnd);
+
+// App Version
+extern const char* APP_VERSION;

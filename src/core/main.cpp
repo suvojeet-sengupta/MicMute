@@ -14,6 +14,12 @@
 #include <iomanip>
 #include <sstream>
 #include "core/resource.h"
+
+// Temporary ID manually added if not in resource.h yet
+#ifndef ID_CHECK_UPDATE
+#define ID_CHECK_UPDATE 4001
+#endif
+
 #include "core/globals.h"
 #include "core/settings.h"
 #include "audio/audio.h"
@@ -24,6 +30,7 @@
 #include "audio/call_recorder.h"
 #include "ui/ui_controls.h"
 #include "ui/control_panel.h"
+#include "network/updater.h"
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -139,6 +146,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     InitializeAudio();
     InitCallRecorder();
     InitHttpServer();
+    
+    // Auto-Updater Init
+    AutoUpdater::Init(hMainWnd);
+    // Silent startup check
+    if (isRunOnStartup) {
+        AutoUpdater::CheckForUpdateAsync(true);
+    } else {
+        // Also check silently on normal launch
+        AutoUpdater::CheckForUpdateAsync(true);
+    }
 
     // Create brushes
     hBrushBg = CreateSolidBrush(colorBg);
@@ -360,6 +377,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             CreateWindow("STATIC", "", 
                 WS_CHILD | SS_LEFT, 
                 contentX, startY + gapY*7, 350, 20, hWnd, (HMENU)9998, hInst, nullptr);
+
+            // Check for Updates Button
+            CreateWindow("BUTTON", "Check for Updates", 
+                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 
+                contentX, startY + gapY*8, 160, 30, hWnd, (HMENU)ID_CHECK_UPDATE, hInst, nullptr);
 
             // === Hide/Unhide Tab Toggles ===
             hHideMuteBtn = CreateWindow("BUTTON", "Mute/Unmute Button",
@@ -798,6 +820,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             else if (wmId == ID_TRAY_OPEN) {
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
+            }
+            else if (wmId == ID_CHECK_UPDATE) {
+                AutoUpdater::CheckForUpdateAsync(false); // Not silent = show dialogs
+            }
             }
             else if (wmId == ID_TRAY_EXIT) {
                 if (hOverlayWnd) DestroyWindow(hOverlayWnd);
