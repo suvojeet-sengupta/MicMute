@@ -33,6 +33,8 @@
 #include "network/updater.h"
 #include "ui/password_dialog.h"
 #include "ui/disclaimer_dialog.h"
+#include "ui/developer_options.h"
+
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -74,13 +76,12 @@ bool isPressedClose = false;
 bool isPressedMin = false;
 
 // General Tab Controls
-HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck, hNotifyCheck, hAutoRecordCheck;
-HWND hBeepCheck;
-HWND hAutoDeleteLabel = nullptr, hAutoDeleteCombo = nullptr;
-static HBRUSH hComboEditBrush = nullptr;
+HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck, hNotifyCheck, hBeepCheck;
+HWND hDevModeCheck, hGoToDevButtons;
 
 // Hide/Unhide Tab Controls
-HWND hHideMuteBtn, hHideVoiceMeter, hHideRecStatus, hHideCallStats, hHideManualRec;
+HWND hHideMuteBtn, hHideVoiceMeter, hHideRecStatus, hHideCallStats;
+
 
 // Shape & Size Tab Controls
 HWND hSizeCompact, hSizeNormal, hSizeWide;
@@ -120,16 +121,25 @@ void UpdateLayout(HWND hWnd) {
     MoveAndShow(hMeterCheck, contentX, startY + gapY*2, 300, 30);
     MoveAndShow(hRecorderCheck, contentX, startY + gapY*3, 300, 30);
     MoveAndShow(hNotifyCheck, contentX, startY + gapY*4, 300, 30);
-    MoveAndShow(hAutoRecordCheck, contentX, startY + gapY*5, 350, 30);
-    if (hBeepCheck) MoveAndShow(hBeepCheck, contentX, startY + gapY*6, 350, 30);
+    MoveAndShow(hBeepCheck, contentX, startY + gapY*5, 300, 30);
     
-    // Auto-Delete (Gap 7)
-    if (hAutoDeleteLabel) MoveAndShow(hAutoDeleteLabel, contentX, startY + gapY*7 + 4, 200, 20);
-    if (hAutoDeleteCombo) MoveAndShow(hAutoDeleteCombo, contentX + 205, startY + gapY*7, 120, 200);
+    // Developer Mode
+    MoveAndShow(hDevModeCheck, contentX, startY + gapY*6, 350, 30);
+    if (isDevModeEnabled) {
+        MoveAndShow(hGoToDevButtons, contentX, startY + gapY*7, 250, 30);
+    } else {
+        ShowWindow(hGoToDevButtons, SW_HIDE);
+    }
 
-    // Extension Status (Gap 8) - Fixed garbled text ID 9998
+    // Extension Status (Gap 8 - moved up)
     HWND hExtStatus = GetDlgItem(hWnd, 9998);
-    if (hExtStatus) MoveAndShow(hExtStatus, contentX, startY + gapY*8 + 8, 350, 20);
+    if (hExtStatus) {
+        if (isDevModeEnabled) {
+            MoveAndShow(hExtStatus, contentX, startY + gapY*8 + 8, 350, 20);
+        } else {
+            ShowWindow(hExtStatus, SW_HIDE);
+        }
+    }
 
     // Check Updates (Gap 9)
     HWND hUpdateBtn = GetDlgItem(hWnd, ID_CHECK_UPDATE);
@@ -141,7 +151,7 @@ void UpdateLayout(HWND hWnd) {
     if (hHideVoiceMeter) ShowWindow(hHideVoiceMeter, showHide);
     if (hHideRecStatus) ShowWindow(hHideRecStatus, showHide);
     if (hHideCallStats) ShowWindow(hHideCallStats, showHide);
-    if (hHideManualRec) ShowWindow(hHideManualRec, showHide);
+
     
     // Shape & Size tab
     int showSize = isSize ? SW_SHOW : SW_HIDE;
@@ -306,8 +316,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         }
     }
 
+    // Register Developer Options
+    RegisterDeveloperOptionsClass(hInstance);
+
     // Create the unified control panel (replaces separate overlay/meter/recorder)
     CreateControlPanel(hInstance);
+
     
     // Legacy: still support individual windows if user prefers
     // if (showOverlay) CreateOverlayWindow(hInstance); 
@@ -399,49 +413,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 contentX, startY + gapY*4, 300, 30, hWnd, (HMENU)ID_SHOW_NOTIFICATIONS, hInst, nullptr);
             SendMessage(hNotifyCheck, BM_SETCHECK, showNotifications ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            hAutoRecordCheck = CreateWindow("BUTTON", "Auto record calls (Ozonetel)", 
-                WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
-                contentX, startY + gapY*5, 350, 30, hWnd, (HMENU)ID_AUTO_RECORD_CALLS, hInst, nullptr);
-            SendMessage(hAutoRecordCheck, BM_SETCHECK, autoRecordCalls ? BST_CHECKED : BST_UNCHECKED, 0);
-
             hBeepCheck = CreateWindow("BUTTON", "Beep on call detected", 
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
-                contentX, startY + gapY*6, 350, 30, hWnd, (HMENU)ID_BEEP_ON_CALL, hInst, nullptr);
+                contentX, startY + gapY*5, 300, 30, hWnd, (HMENU)ID_BEEP_ON_CALL, hInst, nullptr);
             SendMessage(hBeepCheck, BM_SETCHECK, beepOnCall ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            // Auto-delete label
-            hAutoDeleteLabel = CreateWindow("STATIC", "Auto-delete recordings after:", 
-                WS_CHILD | WS_VISIBLE | SS_LEFT, 
-                contentX, startY + gapY*7 + 4, 200, 20, hWnd, (HMENU)ID_AUTO_DELETE_LABEL, hInst, nullptr);
+            hDevModeCheck = CreateWindow("BUTTON", "Enable Developer Mode", 
+                WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 
+                contentX, startY + gapY*6, 350, 30, hWnd, (HMENU)ID_DEV_MODE_TOGGLE, hInst, nullptr);
+            SendMessage(hDevModeCheck, BM_SETCHECK, isDevModeEnabled ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            // Auto-delete combo box
-            hAutoDeleteCombo = CreateWindow("COMBOBOX", "",
-                WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
-                contentX + 205, startY + gapY*7, 120, 200, hWnd, (HMENU)ID_AUTO_DELETE_COMBO, hInst, nullptr);
-            
-            // Populate combo
-            SendMessage(hAutoDeleteCombo, CB_ADDSTRING, 0, (LPARAM)"Never");
-            SendMessage(hAutoDeleteCombo, CB_ADDSTRING, 0, (LPARAM)"7 days");
-            SendMessage(hAutoDeleteCombo, CB_ADDSTRING, 0, (LPARAM)"14 days");
-            SendMessage(hAutoDeleteCombo, CB_ADDSTRING, 0, (LPARAM)"30 days");
-            SendMessage(hAutoDeleteCombo, CB_ADDSTRING, 0, (LPARAM)"60 days");
-            SendMessage(hAutoDeleteCombo, CB_ADDSTRING, 0, (LPARAM)"90 days");
+            hGoToDevButtons = CreateWindow("BUTTON", "Go to Developer Options >", 
+                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 
+                contentX, startY + gapY*7, 250, 30, hWnd, (HMENU)ID_OPEN_DEV_OPTIONS, hInst, nullptr);
 
-            // Select current value
-            int comboIdx = 0;
-            if (autoDeleteDays == 7) comboIdx = 1;
-            else if (autoDeleteDays == 14) comboIdx = 2;
-            else if (autoDeleteDays == 30) comboIdx = 3;
-            else if (autoDeleteDays == 60) comboIdx = 4;
-            else if (autoDeleteDays == 90) comboIdx = 5;
-            SendMessage(hAutoDeleteCombo, CB_SETCURSEL, comboIdx, 0);
-
-            if (hFontSmall) {
-                SendMessage(hAutoDeleteLabel, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
-                SendMessage(hAutoDeleteCombo, WM_SETFONT, (WPARAM)hFontSmall, TRUE);
-            }
-            
-            // Extension status
+            // Extension status (Gap 8)
             CreateWindow("STATIC", "", 
                 WS_CHILD | SS_LEFT, 
                 contentX, startY + gapY*8 + 8, 350, 20, hWnd, (HMENU)9998, hInst, nullptr);
@@ -472,10 +458,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 contentX, startY + gapY*3, 300, 30, hWnd, (HMENU)ID_HIDE_CALL_STATS, hInst, nullptr);
             SendMessage(hHideCallStats, BM_SETCHECK, showCallStats ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            hHideManualRec = CreateWindow("BUTTON", "Manual Record Buttons",
-                WS_CHILD | BS_OWNERDRAW,
-                contentX, startY + gapY*4, 300, 30, hWnd, (HMENU)ID_HIDE_MANUAL_REC, hInst, nullptr);
-            SendMessage(hHideManualRec, BM_SETCHECK, showManualRec ? BST_CHECKED : BST_UNCHECKED, 0);
 
             // === Shape & Size Tab Buttons ===
             hSizeCompact = CreateWindow("BUTTON", "Compact",
@@ -669,7 +651,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
 
             // Call recording stats in General tab
-            if (currentTab == 0 && g_CallRecorder) {
+            if (currentTab == 0 && g_CallRecorder && isDevModeEnabled) {
                 SetTextColor(hdc, colorAccent);
                 SelectObject(hdc, hFontNormal);
                 int contentX = SIDEBAR_WIDTH + 40;
@@ -727,14 +709,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
 
-        case WM_CTLCOLOREDIT: // For Combo Box Edit (though it's droplist, sometimes needs this)
-        case WM_CTLCOLORLISTBOX: {
-            HDC hdcCtl = (HDC)wParam;
-            SetTextColor(hdcCtl, colorText);
-            SetBkColor(hdcCtl, RGB(30, 30, 40)); 
-            if (!hComboEditBrush) hComboEditBrush = CreateSolidBrush(RGB(30, 30, 40));
-            return (LRESULT)hComboEditBrush;
-        }
 
         case WM_CTLCOLORSTATIC: {
             HDC hdcStatic = (HDC)wParam;
@@ -922,55 +896,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             else if (wmId == ID_SHOW_NOTIFICATIONS) {
                 showNotifications = !showNotifications;
-                SaveSettings();
-                InvalidateRect((HWND)lParam, nullptr, FALSE);
-            }
-            else if (wmId == ID_AUTO_RECORD_CALLS) {
-                // Security Check
-                if (!autoRecordCalls) { // If turning ON
-                    // Always show disclaimer when enabling (User Request)
-                    if (!ShowDisclaimerDialog(hWnd)) {
-                        return 0; // Declined
-                    }
-                    // We don't save 'true' here yet. We wait until password success.
-                }
-
-                // Password Protection for ANY toggle (On or Off)
-                if (!PromptForPassword(hWnd)) {
-                    return 0; // Password incorrect or cancelled
-                }
-
-                autoRecordCalls = !autoRecordCalls;
-                
-                // Update agreement flag to match state
-                hasAgreedToDisclaimer = autoRecordCalls;
-                
-                SaveSettings();
-                if (g_CallRecorder) {
-                    if (autoRecordCalls) g_CallRecorder->Enable();
-                    else g_CallRecorder->Disable();
-                }
-                InvalidateRect(hAutoRecordCheck, nullptr, FALSE);
+                UpdateControlPanel();
+                InvalidateRect(hNotifyCheck, nullptr, FALSE);
             }
             else if (wmId == ID_BEEP_ON_CALL) {
                 beepOnCall = !beepOnCall;
                 SaveSettings();
                 InvalidateRect(hBeepCheck, nullptr, FALSE);
             }
-            else if (wmId == ID_AUTO_DELETE_COMBO && HIWORD(wParam) == CBN_SELCHANGE) {
-                int idx = (int)SendMessage(hAutoDeleteCombo, CB_GETCURSEL, 0, 0);
-                switch (idx) {
-                    case 0: autoDeleteDays = 0; break;
-                    case 1: autoDeleteDays = 7; break;
-                    case 2: autoDeleteDays = 14; break;
-                    case 3: autoDeleteDays = 30; break;
-                    case 4: autoDeleteDays = 60; break;
-                    case 5: autoDeleteDays = 90; break;
-                    default: autoDeleteDays = 0; break;
+            else if (wmId == ID_DEV_MODE_TOGGLE) {
+                // If checking: Warning + Password
+                if (!isDevModeEnabled) { // State before toggle was off, now user wants it on
+                    // Password
+                    if (!PromptForPassword(hWnd)) {
+                        // Revert check
+                        SendMessage(hDevModeCheck, BM_SETCHECK, BST_UNCHECKED, 0);
+                        return 0;
+                    }
+                    isDevModeEnabled = true;
+                } else {
+                    // Turn off
+                    isDevModeEnabled = false;
                 }
                 SaveSettings();
-                // Trigger cleanup immediately? Maybe not, let the timer do it next cycle or on restart.
+                UpdateLayout(hWnd); // To show/hide the "Go to" button
             }
+            else if (wmId == ID_OPEN_DEV_OPTIONS) {
+                CreateDeveloperOptionsWindow(GetModuleHandle(nullptr), hWnd);
+            }
+
             // Hide/Unhide tab toggles
             else if (wmId == ID_HIDE_MUTE_BTN) {
                 showMuteBtn = !showMuteBtn;
@@ -997,33 +951,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 InvalidateRect(hHideCallStats, nullptr, FALSE);
             }
 
-            else if (wmId == ID_HIDE_MANUAL_REC) {
-                // Check if enabling
-                if (!showManualRec) {
-                    const char* manualDisclaimer = 
-                        "Manual Recording captures both system audio and microphone input.\n\n"
-                        "By enabling this, you are responsible for notifying all parties if required by law. "
-                        "Unauthorized recording may violate privacy laws.";
-                    
-                    if (!ShowDisclaimerDialog(hWnd, manualDisclaimer)) {
-                        return 0; // Declined
-                    }
-                }
 
-                // Password Protection
-                if (!PromptForPassword(hWnd)) {
-                    return 0; 
-                }
-
-                showManualRec = !showManualRec;
-                
-                // Update agreement flag
-                hasAgreedToManualDisclaimer = showManualRec;
-
-                SaveSettings();
-                UpdateControlPanel();
-                InvalidateRect(hHideManualRec, nullptr, FALSE);
-            }
             // Shape & Size tab
             else if (wmId == ID_SIZE_COMPACT) {
                 panelSizeMode = 0;
@@ -1096,7 +1024,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     }
                 }
                 
-                if (autoRecordCalls) {
+                if (isDevModeEnabled && autoRecordCalls) {
                     HWND hStatus = GetDlgItem(hMainWnd, 9998);
                     if (hStatus) {
                         ShowWindow(hStatus, SW_SHOW);

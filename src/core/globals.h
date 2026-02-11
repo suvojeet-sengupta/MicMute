@@ -38,6 +38,10 @@ extern bool showRecStatus;
 extern bool showCallStats;
 extern bool showManualRec;
 
+// Developer Mode
+extern bool isDevModeEnabled;
+
+
 // Control Panel size mode: 0=Compact, 1=Normal, 2=Wide
 extern int panelSizeMode;
 

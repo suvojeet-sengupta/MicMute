@@ -80,6 +80,10 @@ void SaveSettings() {
         RegSetValueEx(hKey, "AutoRecordCalls", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
         val = beepOnCall ? 1 : 0;
         RegSetValueEx(hKey, "BeepOnCall", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+
+        val = isDevModeEnabled ? 1 : 0;
+        RegSetValueEx(hKey, "IsDevModeEnabled", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+
         
         val = hasAgreedToDisclaimer ? 1 : 0;
         RegSetValueEx(hKey, "DisclaimerAgreed", 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
@@ -185,6 +189,10 @@ void LoadSettings() {
         }
         if (RegQueryValueEx(hKey, "BeepOnCall", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             beepOnCall = val != 0;
+
+        if (RegQueryValueEx(hKey, "IsDevModeEnabled", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+            isDevModeEnabled = val != 0;
+
             
         // These are now handled in the !isFreshOrMoved block above
         /*

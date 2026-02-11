@@ -40,6 +40,8 @@ bool showVoiceMeter = true;
 bool showRecStatus = false;
 bool showCallStats = true;
 bool showManualRec = false;
+bool isDevModeEnabled = false;
+
 
 // Panel size mode (0=Compact, 1=Normal, 2=Wide)
 int panelSizeMode = 1;
