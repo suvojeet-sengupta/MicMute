@@ -50,54 +50,88 @@
     function scrapeCallDetails() {
         const details = {};
 
-        // 1. Try to find the "Call Details" section
-        // Based on typical Ozonetel UI, this might be in a specific container
-        // We'll look for labels and values
+        // Target the Left Side Panel (usually "Call details" inside "Inbound" or just the active call container)
+        // Based on user description: "left side show hota hai call details"
+        
+        // Strategy 1: Look for the specific "Call details" expansion panel or container
+        // In Ozonetel Agent Toolbar, this is often in a specific left column or tab
+        const callDetailsHeaders = Array.from(document.querySelectorAll('.card-header, .accordion-toggle, h4, h5'));
+        let detailsContainer = null;
+        
+        for (const header of callDetailsHeaders) {
+            if (header.innerText.includes('Call details') || header.innerText.includes('IncomingCall')) {
+                // Find the parent or associated content container
+                // Often it's the next sibling or a parent's find
+                const content = header.closest('.card, .panel')?.querySelector('.card-body, .panel-body, .collapse.in, .show');
+                if (content) {
+                    detailsContainer = content;
+                    break;
+                }
+                // Fallback: just use the parent if it looks like a container
+                detailsContainer = header.closest('.card, .panel');
+                if (detailsContainer) break;
+            }
+        }
 
-        // Strategy A: Look for specific known fields if they exist as labelled rows
-        const rows = document.querySelectorAll('.call-details-row, .details-row, tr');
-        rows.forEach(row => {
-            const label = row.querySelector('.label, th, dt')?.innerText?.trim();
-            const value = row.querySelector('.value, td, dd')?.innerText?.trim();
-            if (label && value) {
-                details[label.replace(':', '')] = value;
+        // Strategy 2: If no specific "Call details" container found, look for known key-value structures in the whole left sidebar
+        if (!detailsContainer) {
+            detailsContainer = document.querySelector('#left-panel, .left-pane, .sidebar-left');
+        }
+        
+        // If still nothing, fallback to body (but be careful of noise)
+        const range = detailsContainer || document.body;
+
+        // Extract key-value pairs
+        // Common Ozonetel formats:
+        // 1. <label>Key:</label> <span>Value</span>
+        // 2. <div><span class="label">Key</span> <span class="value">Value</span></div>
+        // 3. Grid: <div>Key</div> <div>Value</div>
+        
+        // Let's try text parsing of lines first as it's often most robust for simple key:value lists
+        const textLines = range.innerText.split('\n');
+        
+        textLines.forEach(line => {
+            // Check for Key: Value format
+            const separatorIndex = line.indexOf(':');
+            if (separatorIndex > 0 && separatorIndex < line.length - 1) {
+                let key = line.substring(0, separatorIndex).trim();
+                let value = line.substring(separatorIndex + 1).trim();
+                
+                // Clean up key (remove extra chars)
+                key = key.replace(/^[:\-\s]+|[:\-\s]+$/g, '');
+                
+                // Filter out likely non-fields
+                if (key.length > 2 && key.length < 50 && value.length > 0) {
+                     // Check for common fields we definitely want
+                     if (['UCID', 'Monitor UCID', 'Campaign', 'Agent ID', 'Skill Name', 'Call Details', 'Caller ID', 'Phone'].includes(key)) {
+                         details[key] = value;
+                     } 
+                     // Or just capture everything that looks like a field
+                     else if (!details[key] && !key.includes('Time') && !value.includes('Disconnect')) {
+                         details[key] = value;
+                     }
+                }
             }
         });
 
-        // Strategy B: If Strategy A fails, try to parse text content of a known container
-        // This is a fallback if specific classes aren't found
-        if (Object.keys(details).length === 0) {
-            const detailsContainer = Array.from(document.querySelectorAll('div, section')).find(el =>
-                el.innerText && el.innerText.includes('Call Details') && el.innerText.length < 1000
-            );
-
-            if (detailsContainer) {
-                const lines = detailsContainer.innerText.split('\n');
-                lines.forEach(line => {
-                    const parts = line.split(':');
-                    if (parts.length >= 2) {
-                        const key = parts[0].trim();
-                        const val = parts.slice(1).join(':').trim(); // Rejoin rest in case value has :
-                        if (key && val && key !== 'Call Details') {
-                            details[key] = val;
-                        }
-                    }
-                });
+        // Specific Selector back-up for UCID if missed by text parsing
+        if (!details['UCID']) {
+            // Try finding element with ID or Class containing UCID
+            const ucidEl = document.querySelector('[id*="ucid" i], [class*="ucid" i]');
+            if (ucidEl) {
+                // Check if it has a value attribute or text
+                const val = ucidEl.value || ucidEl.innerText;
+                if (val && val.length > 5) details['UCID'] = val;
             }
         }
 
-        // Capture Campaign Name specifically if visible elsewhere
-        const campaignEl = document.querySelector('[class*="campaign"], [id*="campaign"]');
-        if (campaignEl && !details['Campaign']) {
-            details['Campaign'] = campaignEl.innerText.trim();
+        // Specific Selector for Campaign
+        if (!details['Campaign']) {
+             const campEl = document.querySelector('[id*="campaign" i], [class*="campaign" i]');
+             if (campEl) details['Campaign'] = campEl.innerText.trim();
         }
 
-        // Capture Phone Number
-        const phoneEl = document.querySelector('.phone-number, [class*="phone"]');
-        if (phoneEl && !details['Phone']) {
-            details['Phone'] = phoneEl.innerText.trim();
-        }
-
+        console.log('[MicMute Connector] Scraped Details:', details);
         return details;
     }
 
