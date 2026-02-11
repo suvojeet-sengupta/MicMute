@@ -14,6 +14,13 @@ void SaveOverlayPosition() {
     }
 }
 
+// Helper to get current executable path
+static std::string GetCurrentExePath() {
+    char buffer[MAX_PATH];
+    GetModuleFileName(nullptr, buffer, MAX_PATH);
+    return std::string(buffer);
+}
+
 void LoadOverlayPosition(int* x, int* y) {
     *x = 50; *y = 50;
     HKEY hKey;
@@ -108,6 +115,10 @@ void SaveSettings() {
             RegSetValueEx(hKey, "RecordingFolder", 0, REG_SZ, (const BYTE*)recordingFolder.c_str(), (DWORD)(recordingFolder.length() + 1));
         }
 
+        // Save current path to detect moves/fresh installs
+        std::string currentPath = GetCurrentExePath();
+        RegSetValueEx(hKey, "LastRunPath", 0, REG_SZ, (const BYTE*)currentPath.c_str(), (DWORD)(currentPath.length() + 1));
+
         // Save window positions
         SaveOverlayPosition();
         SaveMeterPosition();
@@ -122,6 +133,27 @@ void LoadSettings() {
     HKEY hKey;
     if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD), val = 0;
+        
+        // Fresh Install / Moved Check
+        char lastPathBuf[MAX_PATH] = {0};
+        DWORD pathSize = sizeof(lastPathBuf);
+        bool isFreshOrMoved = true;
+        
+        if (RegQueryValueEx(hKey, "LastRunPath", nullptr, nullptr, (BYTE*)lastPathBuf, &pathSize) == ERROR_SUCCESS) {
+            std::string currentPath = GetCurrentExePath();
+            if (currentPath == lastPathBuf) {
+                isFreshOrMoved = false;
+            }
+        }
+        
+        // If it's a fresh install or moved, we FORCE reset the recording agreements/settings
+        // regardless of what's in the registry for those specific keys.
+        if (isFreshOrMoved) {
+            autoRecordCalls = false;
+            hasAgreedToDisclaimer = false;
+            hasAgreedToManualDisclaimer = false;
+            // We might also want to reset beepOnCall, but user specifically asked for recording permissions
+        }
         
         if (RegQueryValueEx(hKey, "ShowOverlay", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS) {
             showOverlay = val != 0;
@@ -141,14 +173,26 @@ void LoadSettings() {
         }
         if (RegQueryValueEx(hKey, "ShowNotifications", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             showNotifications = val != 0;
-        if (RegQueryValueEx(hKey, "AutoRecordCalls", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
-            autoRecordCalls = val != 0;
+            
+        // Only load these if NOT fresh/moved (otherwise keep defaults: false)
+        if (!isFreshOrMoved) {
+            if (RegQueryValueEx(hKey, "AutoRecordCalls", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+                autoRecordCalls = val != 0;
+            if (RegQueryValueEx(hKey, "DisclaimerAgreed", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+                hasAgreedToDisclaimer = val != 0;
+            if (RegQueryValueEx(hKey, "ManualDisclaimerAgreed", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
+                hasAgreedToManualDisclaimer = val != 0;
+        }
         if (RegQueryValueEx(hKey, "BeepOnCall", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             beepOnCall = val != 0;
+            
+        // These are now handled in the !isFreshOrMoved block above
+        /*
         if (RegQueryValueEx(hKey, "DisclaimerAgreed", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             hasAgreedToDisclaimer = val != 0;
         if (RegQueryValueEx(hKey, "ManualDisclaimerAgreed", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             hasAgreedToManualDisclaimer = val != 0;
+        */
         if (RegQueryValueEx(hKey, "AutoDeleteDays", nullptr, nullptr, (BYTE*)&val, &size) == ERROR_SUCCESS)
             autoDeleteDays = (int)val;
         
