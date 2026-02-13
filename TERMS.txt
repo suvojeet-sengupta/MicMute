@@ -1,0 +1,46 @@
+MicMute-S
+Version: 1.2.2
+Developed by: Suvojeet Sengupta
+
+==============================================================================
+                               DESCRIPTION
+==============================================================================
+
+MicMute-S is a high-performance, professional-grade microphone control utility 
+designed specifically for Windows 10 and 11. 
+
+KEY FEATURES:
+* System-Wide Mute: Instantly mute your microphone globally, affecting all apps 
+  (Zoom, Teams, Discord, etc.) simultaneously.
+* Force Mute Mode: Prevents applications from unmuting your microphone without 
+  your permission.
+* Visual Feedback: Clear overlay and tray icons so you always know your status.
+* Push-to-Talk: Configurable hotkeys for seamless audio control.
+* Privacy First: Your audio data stays on your device.
+
+==============================================================================
+                            TERMS AND CONDITIONS
+==============================================================================
+
+1. LICENSE GRANT
+   "MicMute-S" is provided as freeware. You are free to use this software for 
+   personal and commercial purposes.
+
+2. COPYRIGHT
+   All title and copyrights in and to the Software are owned by Suvojeet Sengupta.
+
+3. DISCLAIMER OF WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+   AUTHORS OR COPYRIGHT HOLDERS (SUVOJEET SENGUPTA) BE LIABLE FOR ANY CLAIM, 
+   DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR 
+   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE.
+
+4. PRIVACY
+   MicMute-S respects your privacy. It does not collect, store, or transmit 
+   personal audio data to external servers ensuring complete confidentiality.
+
+==============================================================================
+                        THANK YOU FOR USING MICMUTE-S
+==============================================================================

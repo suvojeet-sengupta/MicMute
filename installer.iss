@@ -20,6 +20,15 @@ OutputBaseFilename=MicMute-S-Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+WizardSizePercent=120
+
+LicenseFile=TERMS.txt
+InfoBeforeFile=TERMS.txt
+SetupIconFile=resources\app.ico
+
+[Messages]
+WelcomeLabel2=This will install [name/ver] on your computer.%n%nDeveloped by Suvojeet Sengupta.%n%nIt is recommended that you close all other applications before continuing.
+ClickFinish=Click Finish to exit Setup. Thank you for choosing MicMute-S by Suvojeet Sengupta.
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
