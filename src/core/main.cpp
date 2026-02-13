@@ -172,6 +172,9 @@ void ResizeControlPanel() {
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    // Set high shutdown priority (0x280 is default for shell, we use same to be treated as system app)
+    SetProcessShutdownParameters(0x280, 0);
+    
     HRESULT hr = CoInitialize(nullptr);
     if (FAILED(hr)) return 0;
 
@@ -393,49 +396,36 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 contentX, startY, 300, 30, hWnd, (HMENU)ID_RUN_STARTUP, hInst, nullptr);
             SendMessage(hStartupCheck, BM_SETCHECK, isRunOnStartup ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            hOverlayCheck = CreateWindow("BUTTON", "Show floating mute button", 
-                WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
-                contentX, startY + gapY, 300, 30, hWnd, (HMENU)ID_SHOW_OVERLAY, hInst, nullptr);
-            SendMessage(hOverlayCheck, BM_SETCHECK, showOverlay ? BST_CHECKED : BST_UNCHECKED, 0);
-
-            hMeterCheck = CreateWindow("BUTTON", "Show voice level meter", 
-                WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
-                contentX, startY + gapY*2, 300, 30, hWnd, (HMENU)ID_SHOW_METER, hInst, nullptr);
-            SendMessage(hMeterCheck, BM_SETCHECK, showMeter ? BST_CHECKED : BST_UNCHECKED, 0);
-
-            hRecorderCheck = CreateWindow("BUTTON", "Show call recorder", 
-                WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
-                contentX, startY + gapY*3, 300, 30, hWnd, (HMENU)ID_SHOW_RECORDER, hInst, nullptr);
-            SendMessage(hRecorderCheck, BM_SETCHECK, showRecorder ? BST_CHECKED : BST_UNCHECKED, 0);
-
             hNotifyCheck = CreateWindow("BUTTON", "Show system notifications", 
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
-                contentX, startY + gapY*4, 300, 30, hWnd, (HMENU)ID_SHOW_NOTIFICATIONS, hInst, nullptr);
+                contentX, startY + gapY, 300, 30, hWnd, (HMENU)ID_SHOW_NOTIFICATIONS, hInst, nullptr);
             SendMessage(hNotifyCheck, BM_SETCHECK, showNotifications ? BST_CHECKED : BST_UNCHECKED, 0);
 
             hBeepCheck = CreateWindow("BUTTON", "Beep on call detected", 
                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 
-                contentX, startY + gapY*5, 300, 30, hWnd, (HMENU)ID_BEEP_ON_CALL, hInst, nullptr);
+                contentX, startY + gapY*2, 300, 30, hWnd, (HMENU)ID_BEEP_ON_CALL, hInst, nullptr);
             SendMessage(hBeepCheck, BM_SETCHECK, beepOnCall ? BST_CHECKED : BST_UNCHECKED, 0);
 
             hDevModeCheck = CreateWindow("BUTTON", "Enable Developer Mode", 
                 WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 
-                contentX, startY + gapY*6, 350, 30, hWnd, (HMENU)ID_DEV_MODE_TOGGLE, hInst, nullptr);
+                contentX, startY + gapY*3, 350, 30, hWnd, (HMENU)ID_DEV_MODE_TOGGLE, hInst, nullptr);
             SendMessage(hDevModeCheck, BM_SETCHECK, isDevModeEnabled ? BST_CHECKED : BST_UNCHECKED, 0);
 
             hGoToDevButtons = CreateWindow("BUTTON", "Go to Developer Options >", 
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 
-                contentX, startY + gapY*7, 250, 30, hWnd, (HMENU)ID_OPEN_DEV_OPTIONS, hInst, nullptr);
+                contentX, startY + gapY*4, 250, 30, hWnd, (HMENU)ID_OPEN_DEV_OPTIONS, hInst, nullptr);
 
-            // Extension status (Gap 8)
+            // Extension status (Gap 5)
             CreateWindow("STATIC", "", 
                 WS_CHILD | SS_LEFT, 
-                contentX, startY + gapY*8 + 8, 350, 20, hWnd, (HMENU)9998, hInst, nullptr);
+                contentX, startY + gapY*5 + 8, 350, 20, hWnd, (HMENU)9998, hInst, nullptr);
 
             // Check for Updates Button
             CreateWindow("BUTTON", "Check for Updates", 
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 
-                contentX, startY + gapY*9, 160, 30, hWnd, (HMENU)ID_CHECK_UPDATE, hInst, nullptr);
+                contentX, startY + gapY*6, 160, 30, hWnd, (HMENU)ID_CHECK_UPDATE, hInst, nullptr);
+
+
 
             // === Hide/Unhide Tab Toggles ===
             hHideMuteBtn = CreateWindow("BUTTON", "Mute/Unmute Button",
@@ -825,7 +815,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             
             if (isPressedClose && PtInRect(&rcClose, pt)) {
                 isPressedClose = false;
-                SendMessage(hWnd, WM_CLOSE, 0, 0);
+                // Min instead of close
+                ShowWindow(hWnd, SW_HIDE);
                 return 0;
             }
             if (isPressedMin && PtInRect(&rcMin, pt)) {

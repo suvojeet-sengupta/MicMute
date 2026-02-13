@@ -31,7 +31,10 @@ static POINT cpDragStart = {0, 0};
 static POINT cpClickStart = {0, 0};
 
 // Hover state
-static int cpHoverItem = -1; // -1: None, 0: Mute, 1: RecStart, 2: RecStop, 3: Folder, 4: Settings
+static int cpHoverItem = -1; // -1: None, 0: Mute, 1: RecStart, 2: RecStop, 3: Folder, 4: Settings, 5: MiniModeToggle
+
+// Mini Mode
+static bool cpMiniMode = false;
 
 
 // Notification for saved recordings
@@ -52,6 +55,17 @@ extern void HandleManualStop(HWND parent);
 static int GetContentWidth(int height) {
     int margin = 8;
     int w = margin;
+    
+    if (cpMiniMode) {
+        // Mini mode: Mute Btn + Expand Toggle
+        // Mute btn size matches height - margin*2
+        int btnSize = height - margin * 2;
+        w += btnSize + margin;
+        
+        // Expand toggle (small width)
+        w += 20 + margin; 
+        return w;
+    }
     
     if (showMuteBtn) {
         int btnSize = height - margin * 2;
@@ -133,6 +147,10 @@ static int GetContentWidth(int height) {
         w += margin; // Separator
         w += 28 + margin;
     }
+    
+    // Collapse Toggle (End)
+    w += margin; 
+    w += 20 + margin;
     
     return w;
 }
@@ -421,11 +439,48 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             bool isMuted = IsDefaultMicMuted();
 
             // === Section 1: Mute Button ===
-            if (showMuteBtn) {
+            if (showMuteBtn || cpMiniMode) { // Always show in mini mode (if enabled? assume yes or fallback)
+                // Actually, if showMuteBtn is false, mini mode might be weird. 
+                // But let's assume if they use mini mode they want the mute button.
                 int btnSize = panelH - margin * 2;
                 RECT muteArea = {drawX, margin, drawX + btnSize, panelH - margin};
                 DrawMuteButton(mem, muteArea, isMuted);
                 drawX += btnSize + margin;
+            }
+
+            // === Mini Mode Toggle Button ===
+            if (cpMiniMode) {
+                // Draw Expand Button
+                int toggleW = 20;
+                RECT rc = {drawX, 0, drawX + toggleW, panelH};
+                
+                if (cpHoverItem == 5) {
+                     HBRUSH hHover = CreateSolidBrush(RGB(50, 50, 65));
+                     FillRect(mem, &rc, hHover);
+                     DeleteObject(hHover);
+                }
+
+                // Draw Arrow >
+                int cx = (rc.left + rc.right) / 2;
+                int cy = (rc.top + rc.bottom) / 2;
+                
+                HPEN arrowPen = CreatePen(PS_SOLID, 2, colorTextDim);
+                SelectObject(mem, arrowPen);
+                
+                // > shape
+                MoveToEx(mem, cx - 3, cy - 5, nullptr);
+                LineTo(mem, cx + 2, cy);
+                LineTo(mem, cx - 3, cy + 5);
+                
+                DeleteObject(arrowPen);
+                
+                // Blit and return early
+                BitBlt(hdc, 0, 0, rect.right, rect.bottom, mem, 0, 0, SRCCOPY);
+                SelectObject(mem, oldBmp);
+                DeleteObject(bmp);
+                DeleteDC(mem);
+                EndPaint(hWnd, &ps);
+                return 0;
             }
 
             // === Separator ===
@@ -738,6 +793,42 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 DeleteObject(gearPen);
 
                 drawX += btnW + margin;
+                drawX += btnW + margin;
+            }
+
+            // === Section 7: Collapse Button ===
+            {
+                 // Add a collapse button at the very end
+                 // Separator
+                 HPEN sepPen = CreatePen(PS_SOLID, 1, colorPanelBorder);
+                 SelectObject(mem, sepPen);
+                 MoveToEx(mem, drawX, 6, nullptr);
+                 LineTo(mem, drawX, panelH - 6);
+                 DeleteObject(sepPen);
+                 drawX += margin;
+                 
+                 int toggleW = 20;
+                 RECT rc = {drawX, 0, drawX + toggleW, panelH};
+                 
+                 if (cpHoverItem == 5) {
+                     HBRUSH hHover = CreateSolidBrush(RGB(50, 50, 65));
+                     FillRect(mem, &rc, hHover);
+                     DeleteObject(hHover);
+                 }
+                 
+                 // Draw Arrow <
+                int cx = (rc.left + rc.right) / 2;
+                int cy = (rc.top + rc.bottom) / 2;
+                
+                HPEN arrowPen = CreatePen(PS_SOLID, 2, colorTextDim);
+                SelectObject(mem, arrowPen);
+                
+                // < shape
+                MoveToEx(mem, cx + 2, cy - 5, nullptr);
+                LineTo(mem, cx - 3, cy);
+                LineTo(mem, cx + 2, cy + 5);
+                
+                DeleteObject(arrowPen);
             }
 
             // Blit
@@ -766,6 +857,20 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             
             int newHover = -1;
 
+            if (cpMiniMode) {
+                 int btnSize = panelH - margin * 2;
+                 if (x >= drawX && x <= drawX + btnSize) newHover = 0; // Mute
+                 drawX += btnSize + margin;
+                 
+                 if (x >= drawX && x <= drawX + 20) newHover = 5; // Expand
+                 
+                 if (newHover != cpHoverItem) {
+                    cpHoverItem = newHover;
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                 }
+                 return 0;
+            }
+
             if (showMuteBtn) {
                 int btnSize = panelH - margin * 2;
                 if (x >= drawX && x <= drawX + btnSize && y >= margin && y <= panelH - margin) {
@@ -790,12 +895,16 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 drawX += btnW + margin;
             }
 
-            // Folder
-            if ((showManualRec || autoRecordCalls) && isDevModeEnabled) {
-                int btnW = 28;
-                int bY = (panelH - btnW) / 2;
-                if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) newHover = 3;
                 drawX += btnW + margin;
+            }
+
+            // Settings
+            drawX += margin + 28 + margin; // Section 6 skipped for logic
+
+            // Check Collapse Button
+            drawX += margin;
+            if (x >= drawX && x <= drawX + 20) {
+                newHover = 5;
             }
             
             if (showCallStats && isDevModeEnabled) drawX += 100 + margin;
@@ -837,15 +946,43 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             int x = LOWORD(lParam);
             int y = HIWORD(lParam);
             
-            // Simple hit testing again for clicks
-            // (Duplicated layout math - ideally refactor into GetItemAt(x,y))
-             int panelH = 0;
+            // Re-calc layout
+            int panelH = 0;
             {
-                RECT r; GetClientRect(hWnd, &r);
-                panelH = r.bottom;
+                 RECT r; GetClientRect(hWnd, &r);
+                 panelH = r.bottom;
             }
             int margin = 8;
             int drawX = margin;
+            
+            if (cpMiniMode) {
+                int btnSize = panelH - margin * 2;
+                // Mute
+                if (x >= drawX && x <= drawX + btnSize) {
+                     ToggleMute();
+                     return 0;
+                }
+                drawX += btnSize + margin;
+                
+                // Expand
+                if (x >= drawX && x <= drawX + 20) {
+                    cpMiniMode = false;
+                    UpdateControlPanel();
+                    SaveControlPanelPosition(); // maybe save state?
+                    return 0;
+                }
+                
+                // Dragging in mini mode
+                 SetCapture(hWnd);
+                 cpDragging = true;
+                 cpDragStart.x = x;
+                 cpDragStart.y = y;
+                 RECT rect; // Declare rect here
+                 GetWindowRect(hWnd, &rect);
+                 cpClickStart.x = rect.left;
+                 cpClickStart.y = rect.top;
+                 return 0;
+            }
 
             if (showMuteBtn) {
                 int btnSize = panelH - margin * 2;
@@ -891,20 +1028,28 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             
             if (showCallStats && isDevModeEnabled) drawX += 100 + margin;
             
-            // Settings
+            // Start Section 6: Settings
             {
-                drawX += margin;
+                drawX += margin; // sep
                 int btnW = 28;
                 int bY = (panelH - btnW) / 2;
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
-                     if (hMainWnd) {
-                        ShowWindow(hMainWnd, SW_RESTORE);
-                        SetForegroundWindow(hMainWnd);
-                    }
+                    // Open settings
+                    SendMessage(hMainWnd, WM_COMMAND, ID_TRAY_OPEN, 0);
+                    return 0;
+                }
+                drawX += btnW + margin;
+            }
+            
+            // Section 7: Collapse
+            {
+                drawX += margin;
+                if (x >= drawX && x <= drawX + 20) {
+                    cpMiniMode = true;
+                    UpdateControlPanel();
                     return 0;
                 }
             }
-
             // Fallthrough: start dragging
             cpDragging = true;
             SetCapture(hWnd);
