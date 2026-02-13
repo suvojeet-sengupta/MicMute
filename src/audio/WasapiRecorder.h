@@ -62,6 +62,7 @@ private:
 
     std::atomic<bool> isRecording;
     std::atomic<bool> isPaused;
+    std::atomic<ULONGLONG> m_recordingStartTime;
     std::atomic<bool> m_streamingMode;
     
     // Capture threads

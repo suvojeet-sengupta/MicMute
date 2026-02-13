@@ -1,5 +1,5 @@
 #define MyAppName "MicMute-S"
-#define MyAppVersion "1.0"
+#define MyAppVersion "1.2.2"
 #define MyAppPublisher "Suvojeet Sengupta"
 #define MyAppExeName "MicMute-S.exe"
 

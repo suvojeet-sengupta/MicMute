@@ -199,10 +199,15 @@ private:
     }
 
 public:
-    AudioManager() : currentPeakLevel(0.0f), currentSpeakerLevel(0.0f), isMutedGlobal(false) {}
+    AudioManager() : currentPeakLevel(0.0f), currentSpeakerLevel(0.0f), isMutedGlobal(false) {
+        // Initialize COM on this thread (likely main thread or dedicated audio thread)
+        // Use COINIT_MULTITHREADED to allow valid access from any thread
+        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    }
     
     ~AudioManager() {
         Stop();
+        CoUninitialize();
     }
 
     void Start() {

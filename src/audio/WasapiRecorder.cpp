@@ -22,6 +22,7 @@ template <class T> void SafeRelease(T **ppT) {
 WasapiRecorder::WasapiRecorder() 
     : isRecording(false)
     , isPaused(false)
+    , m_recordingStartTime(0)
     , m_streamingMode(false)
     , pwfxMic(nullptr)
     , pwfxLoopback(nullptr)
@@ -67,6 +68,7 @@ bool WasapiRecorder::Start() {
     isRecording = true;
     isPaused = false;
     m_streamingMode = false;
+    m_recordingStartTime = GetTickCount64();
     
     // Start both capture threads
     micThread = std::thread(&WasapiRecorder::MicrophoneLoop, this);
@@ -103,6 +105,7 @@ bool WasapiRecorder::StartStreaming(const std::string& outputFolder) {
     isRecording = true;
     isPaused = false;
     m_streamingMode = true;
+    m_recordingStartTime = GetTickCount64();
     m_lastFlushTime = GetTickCount64();
     
     // Start capture threads
@@ -730,6 +733,13 @@ std::string WasapiRecorder::FinalizeStreaming(const std::string& filename) {
 }
 
 double WasapiRecorder::GetDurationSeconds() const {
+    if (isRecording && !isPaused) {
+        return (double)(GetTickCount64() - m_recordingStartTime) / 1000.0;
+    }
+    // If paused or stopped, return accumulated time (need to track handling pause time correctly later if needed)
+    // For now simple elapsed time is better than the 2-second stutter.
+    
+    // Fallback if not recording but writer exists (e.g. just stopped)
     if (m_streamingMode && m_pWriter) {
         return m_pWriter->GetDurationSeconds();
     }
