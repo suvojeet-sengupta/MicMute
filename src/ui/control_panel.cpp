@@ -108,14 +108,19 @@ static int GetContentWidth(int height) {
         w += 140 + margin;
     }
     
-    // Manual Rec
+    // Manual Rec Buttons (Start/Pause + Stop)
     if (isDevModeEnabled && showManualRec) {
-        w += 28 + 4 + 28 + 4 + 28 + margin;
-        
-        // Separator after Manual Rec
-        if (showCallStats) { // Paint logic check: if (showManualRec && showCallStats)
-            w += margin;
-        }
+        w += 28 + 4 + 28 + margin;
+    }
+
+    // Folder Button (Visible if Manual OR Auto is enabled)
+    if (isDevModeEnabled && (showManualRec || autoRecordCalls)) {
+        w += 28 + margin;
+    }
+    
+    // Separator after Rec/Folder controls
+    if (isDevModeEnabled && (showManualRec || autoRecordCalls) && showCallStats) {
+         w += margin;
     }
     
     // Call Stats
@@ -609,13 +614,24 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     HBRUSH red = CreateSolidBrush(RGB(255, 70, 70));
                     FillRect(mem, &sq, red);
                     DeleteObject(red);
-                    drawX += btnW + 4;
+                    drawX += btnW + margin;
                 }
+            }
+
+            // === Section 4b: Folder Button (Manual OR Auto) ===
+            if (isDevModeEnabled && (showManualRec || autoRecordCalls)) {
+                int btnW = 28;
+                int btnH = 28;
+                int bY = (panelH - btnH) / 2;
 
                 // Folder button
                 {
                     RECT rc = {drawX, bY, drawX + btnW, bY + btnH};
                     HBRUSH br = CreateSolidBrush(RGB(45, 45, 60));
+                    if (cpHoverItem == 3) {
+                         DeleteObject(br);
+                         br = CreateSolidBrush(RGB(65, 65, 80));
+                    }
                     FillRect(mem, &rc, br);
                     DeleteObject(br);
 
@@ -630,20 +646,19 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     FillRect(mem, &rTab, folderBr);
                     DeleteObject(folderBr);
                     
+                    if (cpHoverItem == 3) { // Tooltip
+                        SetTextColor(mem, colorTextDim);
+                        SelectObject(mem, hFontSmall);
+                        RECT rcTip = {rc.left, rc.bottom, rc.right, rc.bottom + 12};
+                        DrawText(mem, "Folder", -1, &rcTip, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+                    }
+
                     drawX += btnW + margin;
                 }
-
-                // Separator
-                HPEN sepPen3 = CreatePen(PS_SOLID, 1, colorPanelBorder);
-                SelectObject(mem, sepPen3);
-                MoveToEx(mem, drawX, 6, nullptr);
-                LineTo(mem, drawX, panelH - 6);
-                DeleteObject(sepPen3);
-                drawX += margin;
             }
 
-            // Separator between manual rec and call stats
-            if (isDevModeEnabled && showManualRec && showCallStats) {
+            // Separator check needs to allow for Folder button being present
+            if (isDevModeEnabled && (showManualRec || autoRecordCalls) && showCallStats) {
                  // Gradient Separator
                 for(int i=6; i<panelH-6; i++) {
                     int alpha = 255 - abs(i - panelH/2) * 5;
@@ -772,11 +787,15 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 
                 // Stop
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) newHover = 2;
-                drawX += btnW + 4;
-                
-                // Folder
+                drawX += btnW + margin;
+            }
+
+            // Folder
+            if ((showManualRec || autoRecordCalls) && isDevModeEnabled) {
+                int btnW = 28;
+                int bY = (panelH - btnW) / 2;
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) newHover = 3;
-                drawX += btnW + margin * 2; // + separator
+                drawX += btnW + margin;
             }
             
             if (showCallStats && isDevModeEnabled) drawX += 100 + margin;
@@ -855,14 +874,19 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     HandleManualStop(hWnd);
                     return 0;
                 }
-                drawX += btnW + 4;
-                
+                drawX += btnW + margin;
+            }
+
+            if ((showManualRec || autoRecordCalls) && isDevModeEnabled) {
+                int btnW = 28;
+                int bY = (panelH - btnW) / 2;
+
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
                     extern void ChangeRecordingFolder(HWND parent);
                     ChangeRecordingFolder(hWnd);
                     return 0;
                 }
-                drawX += btnW + margin * 2;
+                drawX += btnW + margin;
             }
             
             if (showCallStats && isDevModeEnabled) drawX += 100 + margin;

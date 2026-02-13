@@ -110,8 +110,21 @@ static LRESULT CALLBACK DeveloperOptionsWndProc(HWND hWnd, UINT msg, WPARAM wPar
             int id = LOWORD(wParam);
             int code = HIWORD(wParam);
 
+            extern bool EnsureRecordingFolderSelected(HWND parent);
+
             if (id == ID_DEV_AUTO_REC && code == BN_CLICKED) {
-                autoRecordCalls = (SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                bool isChecked = (SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                
+                if (isChecked) {
+                    // User is trying to enable it -> Enforce folder selection
+                    if (!EnsureRecordingFolderSelected(hWnd)) {
+                        // Cancelled or failed -> Revert checkbox
+                        SendMessage((HWND)lParam, BM_SETCHECK, BST_UNCHECKED, 0);
+                        return 0;
+                    }
+                }
+                
+                autoRecordCalls = isChecked;
                 SaveSettings(); 
                 // Toggle actual recorder state
                 extern void InitCallRecorder();
@@ -121,7 +134,18 @@ static LRESULT CALLBACK DeveloperOptionsWndProc(HWND hWnd, UINT msg, WPARAM wPar
                 if (autoRecordCalls) InitCallRecorder();
             }
             else if (id == ID_DEV_MANUAL_BTN && code == BN_CLICKED) {
-                showManualRec = (SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                bool isChecked = (SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                
+                if (isChecked) {
+                     // User is trying to enable it -> Enforce folder selection
+                    if (!EnsureRecordingFolderSelected(hWnd)) {
+                        // Cancelled or failed -> Revert checkbox
+                        SendMessage((HWND)lParam, BM_SETCHECK, BST_UNCHECKED, 0);
+                        return 0;
+                    }
+                }
+
+                showManualRec = isChecked;
                 SaveSettings();
                 if (hControlPanel) InvalidateRect(hControlPanel, nullptr, FALSE);
             }

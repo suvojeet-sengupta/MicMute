@@ -11,9 +11,12 @@
 #include <iomanip>
 #include <sstream>
 #include <fstream>
+#include <shobjidl.h>
 
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "comdlg32.lib")
+#pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "shell32.lib")
 
 HWND hRecorderWnd = nullptr;
 static WasapiRecorder recorder; // Global instance
@@ -104,19 +107,53 @@ void NotifyAutoRecordSaved(const std::string& filename) {
 
 // Helpers
 std::string BrowseFolder(HWND owner) {
-    char path[MAX_PATH];
-    BROWSEINFO bi = { 0 };
-    bi.lpszTitle = "Select Recording Output Folder";
-    bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
-    bi.hwndOwner = owner;
-    
-    LPITEMIDLIST pidl = SHBrowseForFolder(&bi);
-    if (pidl != 0) {
-        if (SHGetPathFromIDList(pidl, path)) {
-            CoTaskMemFree(pidl);
-            return std::string(path);
+    IFileOpenDialog* pFileOpen;
+    // Create the FileOpenDialog object.
+    HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL, 
+                                  IID_IFileOpenDialog, reinterpret_cast<void**>(&pFileOpen));
+
+    if (SUCCEEDED(hr)) {
+        // Set options to pick folders
+        DWORD dwOptions;
+        if (SUCCEEDED(pFileOpen->GetOptions(&dwOptions))) {
+            pFileOpen->SetOptions(dwOptions | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
         }
-        CoTaskMemFree(pidl);
+
+        // Apply a title
+        pFileOpen->SetTitle(L"Select Recording Output Folder");
+
+        // Show the dialog
+        hr = pFileOpen->Show(owner);
+
+        if (SUCCEEDED(hr)) {
+            IShellItem* pItem;
+            hr = pFileOpen->GetResult(&pItem);
+            if (SUCCEEDED(hr)) {
+                PWSTR pszFilePath;
+                hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
+
+                if (SUCCEEDED(hr)) {
+                    // Convert WCHAR to std::string (UTF-8 or ANSI depending on project, assumming ANSI for now based on existing code)
+                    // The existing project seems to use std::string everywhere, so likely MultiByte
+                    // But modern Windows coding usually suggests UTF-8. 
+                    // Let's use WideCharToMultiByte to be safe.
+                    
+                    int size_needed = WideCharToMultiByte(CP_UTF8, 0, pszFilePath, -1, NULL, 0, NULL, NULL);
+                    std::string strTo(size_needed, 0);
+                    WideCharToMultiByte(CP_UTF8, 0, pszFilePath, -1, &strTo[0], size_needed, NULL, NULL);
+                    
+                    // Remove null terminator from string size if present (std::string handles it)
+                     if (!strTo.empty() && strTo.back() == '\0') strTo.pop_back();
+
+                    CoTaskMemFree(pszFilePath);
+                    pItem->Release();
+                    pFileOpen->Release();
+                    return strTo;
+                }
+                pItem->Release();
+            }
+        }
+        pFileOpen->Release();
     }
     return "";
 }
