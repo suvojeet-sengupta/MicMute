@@ -242,66 +242,23 @@ static void DrawMuteButton(HDC hdc, RECT area, bool isMuted) {
     Ellipse(hdc, cx - radius, cy - radius, cx + radius, cy + radius);
     SelectObject(hdc, GetStockObject(NULL_BRUSH)); // Restore default
     
-    // Draw Procedural Microphone Icon
-    // Size relative to radius
-    int micW = radius / 2;  // Width of mic body
-    int micH = radius;      // Height of mic body
-    int micY = cy - radius/3; // Top of mic body
-    
-    // White color for icon
-    HPEN iconPen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
-    HBRUSH iconBr = CreateSolidBrush(RGB(255, 255, 255));
-    SelectObject(hdc, iconPen);
-    SelectObject(hdc, iconBr);
-    
-    // 1. Mic Body (Capsule)
-    RoundRect(hdc, cx - micW/2, micY, cx + micW/2, micY + micH, micW, micW);
-    
-    // 2. Mic Stand / U-shape (Line only)
-    SelectObject(hdc, GetStockObject(NULL_BRUSH)); // Don't fill the stand arc
-    // Arc bounds: slightly wider than body, from middle of body to below it
-    int arcW = micW + 6;
-    int arcTop = micY + micH / 2;
-    int arcBottom = micY + micH + 3; 
-    // Arc(hdc, cx - arcW/2, arcTop, cx + arcW/2, arcBottom, cx + arcW/2, arcTop, cx - arcW/2, arcTop); 
-    // Use Arc to draw the cup
-    // Bounding rect for the arc circle
-    int cupR = arcW / 2;
-    // Bounding rect: left, top, right, bottom
-    // We want a half-circle (U shape)
-    // The bounding box for the full ellipse would be centered at (cx, micY + micH - cupR)
-    // Actually simpler: just draw a U shape with lines/bezier or Arc.
-    // Arc uses bounding rect.
-    RECT rcArc = {cx - cupR, micY + micH - cupR - 2, cx + cupR, micY + micH + cupR - 4}; 
-    // Start point: (right, middle), End point: (left, middle) for bottom half
-    Arc(hdc, rcArc.left, rcArc.top, rcArc.right, rcArc.bottom, 
-        rcArc.right, (rcArc.top + rcArc.bottom)/2, 
-        rcArc.left, (rcArc.top + rcArc.bottom)/2);
-        
-    // 3. Stand Base (Vertical line + Horizontal base)
-    MoveToEx(hdc, cx, rcArc.bottom, nullptr);
-    LineTo(hdc, cx, rcArc.bottom + 4); // Stem
-    
-    int baseW = micW;
-    MoveToEx(hdc, cx - baseW/2, rcArc.bottom + 4, nullptr);
-    LineTo(hdc, cx + baseW/2, rcArc.bottom + 4); // Base
-    
-    // 4. Muted Slash
-    if (isMuted) {
-         HPEN slashPen = CreatePen(PS_SOLID, 3, RGB(255, 255, 255)); // Thicker
-         SelectObject(hdc, slashPen);
-         // Draw diagonal slash
-         int slashLen = radius;
-         MoveToEx(hdc, cx - slashLen/2, cy + slashLen/2, nullptr);
-         LineTo(hdc, cx + slashLen/2, cy - slashLen/2);
-         DeleteObject(slashPen);
+    // Icon
+    HICON hIcon = isMuted ? hIconMicOff : hIconMicOn;
+    if (hIcon) {
+        int iconSize = radius;
+        DrawIconEx(hdc, cx - iconSize / 2, cy - iconSize / 2, hIcon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
+    } else {
+        // Fallback text
+        SetTextColor(hdc, RGB(255, 255, 255));
+        SelectObject(hdc, hFontBold);
+        const char* label = isMuted ? "M" : "L";
+        RECT tr = area;
+        DrawText(hdc, label, -1, &tr, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
     }
     
     // Cleanup
     SelectObject(hdc, GetStockObject(BLACK_PEN));
     SelectObject(hdc, GetStockObject(NULL_BRUSH));
-    DeleteObject(iconPen);
-    DeleteObject(iconBr);
     DeleteObject(fillBr);
     DeleteObject(borderPen);
 

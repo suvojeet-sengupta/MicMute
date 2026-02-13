@@ -290,8 +290,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     DWM_WINDOW_CORNER_PREFERENCE cornerPref = DWMWCP_ROUND;
     DwmSetWindowAttribute(hMainWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPref, sizeof(cornerPref));
 
-    hIconMicOn = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_MIC_ON));
-    hIconMicOff = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_MIC_OFF));
+    // Load High-Res icons (e.g. 64x64) for Control Panel usage
+    // Standard LoadIcon loads 32x32 which looks bad on large buttons.
+    int iconSize = 64; 
+    hIconMicOn = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_MIC_ON), IMAGE_ICON, iconSize, iconSize, LR_DEFAULTCOLOR);
+    hIconMicOff = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_MIC_OFF), IMAGE_ICON, iconSize, iconSize, LR_DEFAULTCOLOR);
 
     // Create Fonts
     hFontTitle = CreateFont(28, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 
