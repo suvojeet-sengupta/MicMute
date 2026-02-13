@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include "core/resource.h"
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -868,7 +869,13 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     cpHoverItem = newHover;
                     InvalidateRect(hWnd, nullptr, FALSE);
                  }
-                 return 0;
+                
+                if (cpDragging) {
+                    POINT pt; GetCursorPos(&pt);
+                    SetWindowPos(hWnd, nullptr, pt.x - cpDragStart.x, pt.y - cpDragStart.y,
+                                 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+                }
+                return 0;
             }
 
             if (showMuteBtn) {
@@ -895,18 +902,14 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 drawX += btnW + margin;
             }
 
+            // Folder
+            if ((showManualRec || autoRecordCalls) && isDevModeEnabled) {
+                int btnW = 28;
+                int bY = (panelH - btnW) / 2;
+                if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) newHover = 3;
                 drawX += btnW + margin;
             }
 
-            // Settings
-            drawX += margin + 28 + margin; // Section 6 skipped for logic
-
-            // Check Collapse Button
-            drawX += margin;
-            if (x >= drawX && x <= drawX + 20) {
-                newHover = 5;
-            }
-            
             if (showCallStats && isDevModeEnabled) drawX += 100 + margin;
             
             // Settings
@@ -915,6 +918,15 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 int btnW = 28;
                 int bY = (panelH - btnW) / 2;
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) newHover = 4;
+                drawX += btnW + margin;
+            }
+            
+            // Collapse Button
+            {
+                drawX += margin;
+                if (x >= drawX && x <= drawX + 20) {
+                    newHover = 5;
+                }
             }
 
             if (newHover != cpHoverItem) {
