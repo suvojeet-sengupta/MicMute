@@ -34,7 +34,7 @@ bool StreamingWavWriter::Start(const std::string& outputFolder, int sampleRate, 
     m_blockAlign = channels * bitsPerSample / 8;
     m_byteRate = sampleRate * m_blockAlign;
     m_totalBytesWritten = 0;
-    m_lastFlushTime = GetTickCount();
+    m_lastFlushTime = GetTickCount64();
 
     // Generate temp filename with timestamp
     auto t = std::time(nullptr);
@@ -204,7 +204,7 @@ double StreamingWavWriter::GetDurationSeconds() const {
 
 void StreamingWavWriter::PeriodicFlush() {
     // Check if it's time to flush (every 5 seconds)
-    DWORD now = GetTickCount();
+    ULONGLONG now = GetTickCount64();
     if (now - m_lastFlushTime < 5000) return;
 
     m_lastFlushTime = now;

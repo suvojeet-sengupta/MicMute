@@ -53,7 +53,7 @@ HFONT hFontSmall;
 HFONT hFontOverlay;
 HFONT hFontBold;
 
-DWORD lastToggleTime = 0;
+ULONGLONG lastToggleTime = 0;
 int skipTimerCycles = 0;
 
 HICON hIconMicOn = nullptr;

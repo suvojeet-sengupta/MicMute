@@ -150,7 +150,7 @@ static LRESULT CALLBACK DeveloperOptionsWndProc(HWND hWnd, UINT msg, WPARAM wPar
                 if (hControlPanel) InvalidateRect(hControlPanel, nullptr, FALSE);
             }
             else if (id == ID_DEV_DELETE_COMBO && code == CBN_SELCHANGE) {
-                int idx = SendMessage((HWND)lParam, CB_GETCURSEL, 0, 0);
+                int idx = (int)SendMessage((HWND)lParam, CB_GETCURSEL, 0, 0);
                 switch(idx) {
                     case 0: autoDeleteDays = 0; break;
                     case 1: autoDeleteDays = 7; break;

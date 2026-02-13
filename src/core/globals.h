@@ -52,7 +52,7 @@ extern HFONT hFontSmall;
 extern HFONT hFontOverlay;
 extern HFONT hFontBold;
 
-extern DWORD lastToggleTime;
+extern ULONGLONG lastToggleTime;
 extern int skipTimerCycles;
 
 // Cached icons

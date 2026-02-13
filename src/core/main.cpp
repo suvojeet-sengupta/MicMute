@@ -983,7 +983,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_TRAYICON: {
             if (lParam == WM_LBUTTONUP) {
-                DWORD t = GetTickCount();
+                ULONGLONG t = GetTickCount64();
                 if (t - lastToggleTime < 500) break;
                 lastToggleTime = t;
                 skipTimerCycles = 2;

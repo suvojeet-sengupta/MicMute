@@ -45,9 +45,9 @@ public:
     std::string GetCurrentDateFolder() const;
 
     // Duration in milliseconds
-    DWORD GetRecordingDuration() const {
+    ULONGLONG GetRecordingDuration() const {
         if (currentState != State::RECORDING) return 0;
-        return GetTickCount() - recordingStartTick;
+        return GetTickCount64() - recordingStartTick;
     }
 
     // Configuration
@@ -79,8 +79,8 @@ private:
     State currentState;
     
     // Timing
-    DWORD lastVoiceTime;      // Last time voice was detected
-    DWORD recordingStartTick; // When current recording started
+    ULONGLONG lastVoiceTime;      // Last time voice was detected
+    ULONGLONG recordingStartTick; // When current recording started
     time_t recordingStartTime;// CalendarCall start time
     
     // Configuration

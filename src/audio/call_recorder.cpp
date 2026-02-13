@@ -223,7 +223,7 @@ void CallAutoRecorder::OnVoiceDetected() {
     
     // Start recording
     if (pRecorder->Start()) {
-        recordingStartTick = GetTickCount();
+        recordingStartTick = GetTickCount64();
         recordingStartTime = std::time(nullptr);
         lastVoiceTime = recordingStartTick;
         TransitionTo(State::RECORDING);
@@ -239,7 +239,7 @@ void CallAutoRecorder::OnSilenceTimeout() {
     pRecorder->Stop();
     
     // Check minimum duration
-    DWORD duration = GetTickCount() - recordingStartTick;
+    ULONGLONG duration = GetTickCount64() - recordingStartTick;
     if (duration >= (DWORD)minCallDurationMs) {
         SaveCurrentRecording();
     }
@@ -288,7 +288,7 @@ void CallAutoRecorder::ForceStartRecording(const std::map<std::string, std::stri
     
     // Start streaming mode for memory safety
     if (pRecorder->StartStreaming(dateFolder)) {
-        recordingStartTick = GetTickCount();
+        recordingStartTick = GetTickCount64();
         recordingStartTime = std::time(nullptr);
         lastVoiceTime = recordingStartTick;
         TransitionTo(State::RECORDING);
@@ -315,7 +315,7 @@ void CallAutoRecorder::ForceStopRecording(const std::map<std::string, std::strin
     pRecorder->Stop();
     
     // Save if long enough
-    DWORD duration = GetTickCount() - recordingStartTick;
+    ULONGLONG duration = GetTickCount64() - recordingStartTick;
     if (duration >= (DWORD)minCallDurationMs) {
         SaveCurrentRecording();
     } else {

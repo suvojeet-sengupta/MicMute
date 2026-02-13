@@ -7,7 +7,7 @@ void SaveOverlayPosition() {
     if (!hOverlayWnd) return;
     RECT rect; GetWindowRect(hOverlayWnd, &rect);
     HKEY hKey;
-    if (RegCreateKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\MicMute-S", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
         RegSetValueEx(hKey, "OverlayX", 0, REG_DWORD, (BYTE*)&rect.left, sizeof(DWORD));
         RegSetValueEx(hKey, "OverlayY", 0, REG_DWORD, (BYTE*)&rect.top, sizeof(DWORD));
         RegCloseKey(hKey);
@@ -24,7 +24,7 @@ static std::string GetCurrentExePath() {
 void LoadOverlayPosition(int* x, int* y) {
     *x = 50; *y = 50;
     HKEY hKey;
-    if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\MicMute-S", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD);
         RegQueryValueEx(hKey, "OverlayX", nullptr, nullptr, (BYTE*)x, &size);
         RegQueryValueEx(hKey, "OverlayY", nullptr, nullptr, (BYTE*)y, &size);
@@ -39,7 +39,7 @@ void SaveMeterPosition() {
     int h = rect.bottom - rect.top;
     
     HKEY hKey;
-    if (RegCreateKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\MicMute-S", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
         RegSetValueEx(hKey, "MeterX", 0, REG_DWORD, (BYTE*)&rect.left, sizeof(DWORD));
         RegSetValueEx(hKey, "MeterY", 0, REG_DWORD, (BYTE*)&rect.top, sizeof(DWORD));
         RegSetValueEx(hKey, "MeterW", 0, REG_DWORD, (BYTE*)&w, sizeof(DWORD));
@@ -53,7 +53,7 @@ void LoadMeterPosition(int* x, int* y, int* w, int* h) {
     *w = 180; *h = 100;
     
     HKEY hKey;
-    if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\MicMute-S", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD);
         RegQueryValueEx(hKey, "MeterX", nullptr, nullptr, (BYTE*)x, &size);
         RegQueryValueEx(hKey, "MeterY", nullptr, nullptr, (BYTE*)y, &size);
@@ -65,7 +65,7 @@ void LoadMeterPosition(int* x, int* y, int* w, int* h) {
 
 void SaveSettings() {
     HKEY hKey;
-    if (RegCreateKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\MicMute-S", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
         DWORD val;
         
         val = showOverlay ? 1 : 0;
@@ -135,7 +135,7 @@ void SaveSettings() {
 void LoadSettings() {
     isRunOnStartup = IsStartupEnabled();
     HKEY hKey;
-    if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\MicMute-S", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD), val = 0;
         
         // Fresh Install / Moved Check
@@ -261,7 +261,7 @@ void ManageStartup(bool enable) {
 bool IsStartupEnabled() {
     HKEY hKey;
     bool exists = false;
-    if (RegOpenKey(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", &hKey) == ERROR_SUCCESS) {
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         if (RegQueryValueEx(hKey, "MicMute-S", nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS)
             exists = true;
         RegCloseKey(hKey);

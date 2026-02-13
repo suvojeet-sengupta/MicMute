@@ -25,7 +25,7 @@ bool IsHttpServerRunning();
 bool IsExtensionConnected();
 
 // Get time since last heartbeat in milliseconds
-DWORD GetTimeSinceLastHeartbeat();
+ULONGLONG GetTimeSinceLastHeartbeat();
 
 // Force start/stop recording (called by HTTP endpoints)
 void HttpForceStartRecording(const std::map<std::string, std::string>& metadata = {});

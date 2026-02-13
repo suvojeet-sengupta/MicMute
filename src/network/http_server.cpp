@@ -19,7 +19,7 @@ static std::thread serverThread;
 #include <vector>
 
 // Extension connection tracking
-static DWORD lastHeartbeatTime = 0;
+static ULONGLONG lastHeartbeatTime = 0;
 static std::atomic<bool> extensionConnected(false);
 #define HEARTBEAT_TIMEOUT_MS 5000  // 5 seconds without heartbeat = disconnected
 
@@ -132,13 +132,13 @@ void HandleRequest(SOCKET client) {
     if (strcmp(method, "POST") == 0) {
         if (strcmp(path, "/ping") == 0) {
             // Heartbeat from extension - update connection status
-            lastHeartbeatTime = GetTickCount();
+            lastHeartbeatTime = GetTickCount64();
             extensionConnected = true;
             SendResponse(client, 200, "OK", "{\"status\":\"pong\",\"connected\":true}");
         }
         else if (strcmp(path, "/start") == 0) {
             // Start recording via extension signal
-            lastHeartbeatTime = GetTickCount();
+            lastHeartbeatTime = GetTickCount64();
             extensionConnected = true;
             
             std::map<std::string, std::string> metadata = ParseMetadataFromJSON(bodyStr);
@@ -148,7 +148,7 @@ void HandleRequest(SOCKET client) {
         }
         else if (strcmp(path, "/stop") == 0) {
             // Stop recording and save via extension signal
-            lastHeartbeatTime = GetTickCount();
+            lastHeartbeatTime = GetTickCount64();
             extensionConnected = true;
             
             std::map<std::string, std::string> metadata = ParseMetadataFromJSON(bodyStr);
@@ -271,17 +271,17 @@ bool IsExtensionConnected() {
     if (!extensionConnected) return false;
     
     // Check if heartbeat timed out
-    DWORD now = GetTickCount();
-    if (lastHeartbeatTime > 0 && (now - lastHeartbeatTime) > HEARTBEAT_TIMEOUT_MS) {
+    ULONGLONG now = GetTickCount64();
+    if (lastHeartbeatTime > 0 && (now - lastHeartbeatTime) > (ULONGLONG)HEARTBEAT_TIMEOUT_MS) {
         extensionConnected = false;
         return false;
     }
     return true;
 }
 
-DWORD GetTimeSinceLastHeartbeat() {
-    if (lastHeartbeatTime == 0) return UINT_MAX;
-    return GetTickCount() - lastHeartbeatTime;
+ULONGLONG GetTimeSinceLastHeartbeat() {
+    if (lastHeartbeatTime == 0) return _UI64_MAX;
+    return GetTickCount64() - lastHeartbeatTime;
 }
 
 void HttpForceStartRecording(const std::map<std::string, std::string>& metadata) {

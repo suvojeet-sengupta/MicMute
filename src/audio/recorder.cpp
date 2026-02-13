@@ -31,8 +31,8 @@ HWND hToolTip = nullptr;
 
 // Auto-record status notification
 static std::string lastSavedFileName;
-static DWORD savedNotifyStartTime = 0;
-static const DWORD SAVED_NOTIFY_DURATION_MS = 3000; // Show "Saved" for 3 seconds
+static ULONGLONG savedNotifyStartTime = 0;
+static const ULONGLONG SAVED_NOTIFY_DURATION_MS = 3000; // Show "Saved" for 3 seconds
 static int animationFrame = 0; // For pulsing animation
 
 void SaveRecorderPosition() {
@@ -42,7 +42,7 @@ void SaveRecorderPosition() {
     int h = rect.bottom - rect.top;
     
     HKEY hKey;
-    if (RegCreateKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\MicMute-S", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
         RegSetValueEx(hKey, "RecorderX", 0, REG_DWORD, (BYTE*)&rect.left, sizeof(DWORD));
         RegSetValueEx(hKey, "RecorderY", 0, REG_DWORD, (BYTE*)&rect.top, sizeof(DWORD));
         // W and H are fixed/calculated now, but saving them doesn't hurt
@@ -60,7 +60,7 @@ void LoadRecorderPosition(int* x, int* y, int* w, int* h) {
     *y = screenH - *h - 100; // Near bottom, 100px from edge
     
     HKEY hKey;
-    if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\MicMute-S", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD);
         int savedX = *x, savedY = *y;
         RegQueryValueEx(hKey, "RecorderX", nullptr, nullptr, (BYTE*)&savedX, &size);
@@ -95,7 +95,7 @@ void CleanupRecorder() {
 // Called by CallAutoRecorder when a call is saved
 void NotifyAutoRecordSaved(const std::string& filename) {
     lastSavedFileName = filename;
-    savedNotifyStartTime = GetTickCount();
+    savedNotifyStartTime = GetTickCount64();
     if (hRecorderWnd) {
         InvalidateRect(hRecorderWnd, nullptr, FALSE);
     }
@@ -470,7 +470,7 @@ LRESULT CALLBACK RecorderWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             textRect.right -= 150; // Space for buttons
             
             // Check for saved notification first (shows for 3 seconds)
-            DWORD now = GetTickCount();
+            ULONGLONG now = GetTickCount64();
             bool showingSavedNotify = (savedNotifyStartTime > 0 && 
                                        (now - savedNotifyStartTime) < SAVED_NOTIFY_DURATION_MS);
             

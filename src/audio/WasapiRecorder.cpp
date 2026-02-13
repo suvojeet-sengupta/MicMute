@@ -103,7 +103,7 @@ bool WasapiRecorder::StartStreaming(const std::string& outputFolder) {
     isRecording = true;
     isPaused = false;
     m_streamingMode = true;
-    m_lastFlushTime = GetTickCount();
+    m_lastFlushTime = GetTickCount64();
     
     // Start capture threads
     micThread = std::thread(&WasapiRecorder::MicrophoneLoop, this);

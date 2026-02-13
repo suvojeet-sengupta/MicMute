@@ -83,8 +83,8 @@ private:
     // Mixer synchronization
     std::mutex m_mixerMutex;
     std::condition_variable m_mixerCV;
-    DWORD m_lastFlushTime;
-    static const DWORD FLUSH_INTERVAL_MS = 2000; // Flush every 2 seconds
+    ULONGLONG m_lastFlushTime;
+    static const ULONGLONG FLUSH_INTERVAL_MS = 2000; // Flush every 2 seconds
     static const size_t MAX_BUFFER_SIZE = 5 * 1024 * 1024; // 5MB max buffer (~25 seconds)
     
     // Audio Formats (may differ between devices)

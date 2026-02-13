@@ -40,8 +40,8 @@ static bool cpMiniMode = false;
 
 // Notification for saved recordings
 static std::string cpLastSavedFile;
-static DWORD cpSavedNotifyTime = 0;
-static const DWORD SAVED_NOTIFY_MS = 3000;
+static ULONGLONG cpSavedNotifyTime = 0;
+static const ULONGLONG SAVED_NOTIFY_MS = 3000;
 
 // External functions from recorder.cpp
 extern WasapiRecorder* GetManualRecorder();
@@ -180,7 +180,7 @@ void SaveControlPanelPosition() {
     if (!hControlPanel) return;
     RECT rect; GetWindowRect(hControlPanel, &rect);
     HKEY hKey;
-    if (RegCreateKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\MicMute-S", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
         RegSetValueEx(hKey, "PanelX", 0, REG_DWORD, (BYTE*)&rect.left, sizeof(DWORD));
         RegSetValueEx(hKey, "PanelY", 0, REG_DWORD, (BYTE*)&rect.top, sizeof(DWORD));
         RegCloseKey(hKey);
@@ -197,7 +197,7 @@ void LoadControlPanelPosition(int* x, int* y, int* w, int* h) {
     *y = screenH - *h - 80;
 
     HKEY hKey;
-    if (RegOpenKey(HKEY_CURRENT_USER, "Software\\MicMute-S", &hKey) == ERROR_SUCCESS) {
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\MicMute-S", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         DWORD size = sizeof(DWORD);
         int savedX = *x, savedY = *y;
         RegQueryValueEx(hKey, "PanelX", nullptr, nullptr, (BYTE*)&savedX, &size);
@@ -381,7 +381,7 @@ void CreateControlPanel(HINSTANCE hInstance) {
 void UpdateControlPanel() {
     if (hControlPanel && IsWindowVisible(hControlPanel)) {
         // Resize if content changed
-        int x, y, w, h;
+        int w, h;
         RECT r; GetWindowRect(hControlPanel, &r);
         float scale = GetWindowScale(hControlPanel);
         GetPanelDimensions(panelSizeMode, scale, &w, &h);
@@ -400,7 +400,7 @@ void UpdateControlPanel() {
 
 void SetControlPanelSavedStatus(const std::string& filename) {
     cpLastSavedFile = filename;
-    cpSavedNotifyTime = GetTickCount();
+    cpSavedNotifyTime = GetTickCount64();
     UpdateControlPanel();
 }
 
@@ -531,7 +531,7 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 int statusW = 140;
                 RECT statusRect = {drawX, 4, drawX + statusW, panelH - 4};
 
-                DWORD now = GetTickCount();
+                ULONGLONG now = GetTickCount64();
                 bool showingSaved = (cpSavedNotifyTime > 0 && (now - cpSavedNotifyTime) < SAVED_NOTIFY_MS);
 
                 SelectObject(mem, hFontSmall);
@@ -548,7 +548,7 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     SetTextColor(mem, RGB(pulse, 55, 55));
                     const char* dots[] = {"●  ", " ● ", "  ●"};
                     
-                    DWORD ms = g_CallRecorder->GetRecordingDuration();
+                    ULONGLONG ms = g_CallRecorder->GetRecordingDuration();
                     int seconds = (ms / 1000) % 60;
                     int minutes = (ms / 1000) / 60;
                     char timeBuf[32];

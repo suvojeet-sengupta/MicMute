@@ -10,7 +10,7 @@
 static std::string inputPassword;
 static bool passwordCorrect = false;
 static bool errorFlash = false;
-static DWORD errorFlashTime = 0;
+static ULONGLONG errorFlashTime = 0;
 static HBRUSH hEditBrush = nullptr;
 
 // Theme colors (matching app navy-dark theme)
@@ -132,7 +132,7 @@ static LRESULT CALLBACK PasswordDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
             DrawText(mem, "Enter password to continue", -1, &rcSub, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
 
             // Edit field border (drawn around the EDIT control area)
-            DWORD now = GetTickCount();
+            ULONGLONG now = GetTickCount64();
             bool showError = errorFlash && (now - errorFlashTime < 1500);
             COLORREF borderCol = showError ? kFieldError : kFieldBorder;
             HPEN editBorderPen = CreatePen(PS_SOLID, 2, borderCol);
@@ -249,7 +249,7 @@ static LRESULT CALLBACK PasswordDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
                     DestroyWindow(hWnd);
                 } else {
                     errorFlash = true;
-                    errorFlashTime = GetTickCount();
+                    errorFlashTime = GetTickCount64();
                     SetWindowText(GetDlgItem(hWnd, ID_EDIT_PASS), "");
                     SetFocus(GetDlgItem(hWnd, ID_EDIT_PASS));
                     InvalidateRect(hWnd, nullptr, FALSE);
