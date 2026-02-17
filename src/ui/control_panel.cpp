@@ -1132,8 +1132,8 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
                     if (IsPlayerWindowVisible()) ClosePlayerWindow();
                     else {
-                        // Security: require password before opening player
-                        if (!PromptForPassword(hWnd)) return 0;
+                        // Security: require password if dev mode is not active
+                        if (!isDevModeEnabled && !PromptForPassword(hWnd)) return 0;
                         ShowPlayerWindow();
                     }
                     return 0;
