@@ -21,6 +21,8 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 WizardSizePercent=120
+CloseApplications=force
+RestartApplications=yes
 
 LicenseFile=TERMS.txt
 InfoBeforeFile=TERMS.txt

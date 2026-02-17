@@ -1,5 +1,6 @@
 #include "ui/control_panel.h"
 #include "ui/player_window.h"
+#include "ui/password_dialog.h"
 #include "core/globals.h"
 #include "core/settings.h"
 #include "audio/audio.h"
@@ -1130,7 +1131,11 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 int bY = (panelH - btnW) / 2;
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
                     if (IsPlayerWindowVisible()) ClosePlayerWindow();
-                    else ShowPlayerWindow();
+                    else {
+                        // Security: require password before opening player
+                        if (!PromptForPassword(hWnd)) return 0;
+                        ShowPlayerWindow();
+                    }
                     return 0;
                 }
                 drawX += btnW + margin;

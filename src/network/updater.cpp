@@ -322,32 +322,32 @@ namespace AutoUpdater {
         GetTempPath(MAX_PATH, tempPath);
         std::string updateFile = std::string(tempPath) + (isInstaller ? "MicMuteUpdate.exe" : "MicMuteUpdate.zip");
         
-        // Notify start
-        // MessageBox(hParent, "Downloading update...", "MicMute Updater", MB_ICONINFORMATION);
+        // Get our own exe path for restart logic
+        char exePath[MAX_PATH];
+        GetModuleFileName(NULL, exePath, MAX_PATH);
+        std::string currentExe = exePath;
+        std::string currentDir = std::filesystem::path(exePath).parent_path().string();
         
         if (DownloadFile(downloadUrl, updateFile)) {
             if (isInstaller) {
-                // Run installer silently
-                // /SILENT or /VERYSILENT for Inno Setup
-                ShellExecute(NULL, "open", updateFile.c_str(), "/SILENT /SP- /CLOSEAPPLICATIONS", NULL, SW_SHOWNORMAL);
+                // Create a batch script that waits for installer to finish, then restarts MicMute
+                std::string batPath = std::string(tempPath) + "micmute_update_restart.bat";
+                std::ofstream bat(batPath);
+                bat << "@echo off\n";
+                bat << "echo Updating MicMute-S...\n";
+                // Run installer silently and wait for it to finish
+                bat << "\"" << updateFile << "\" /SILENT /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS\n";
+                // Wait a moment for the installer to fully complete
+                bat << "timeout /t 3 /nobreak > NUL\n";
+                // Restart MicMute from its install location
+                bat << "start \"\" \"" << currentExe << "\"\n";
+                bat << "del \"%~f0\" & exit\n";
+                bat.close();
+                
+                ShellExecute(NULL, "open", batPath.c_str(), NULL, NULL, SW_HIDE);
                 PostQuitMessage(0);
             } else {
                 // Portable update logic
-                // 1. Extract zip? (Too complex without lib)
-                // 2. If it's an exe (portable single file), just replace.
-                // Assuming portable is a ZIP... we need 7zip or Powershell.
-                // Let's use PowerShell to extract to current dir
-                
-                char exePath[MAX_PATH];
-                GetModuleFileName(NULL, exePath, MAX_PATH);
-                std::string currentDir = std::filesystem::path(exePath).parent_path().string();
-                
-                // Construct a batch script to:
-                // 1. Wait for this process to end
-                // 2. Unzip update to current dir (overwrite)
-                // 3. Restart app
-                // 4. Delete self
-                
                 std::string batPath = currentDir + "\\update.bat";
                 std::ofstream bat(batPath);
                 
