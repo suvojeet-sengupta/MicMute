@@ -299,6 +299,9 @@ void CreatePlayerWindow(HINSTANCE hInstance) {
 }
 
 void ShowPlayerWindow() {
+    if (!hPlayerWnd) {
+        CreatePlayerWindow(GetModuleHandle(nullptr));
+    }
     if (hPlayerWnd) {
         ShowWindow(hPlayerWnd, SW_SHOW);
         SetForegroundWindow(hPlayerWnd);
