@@ -1,4 +1,5 @@
 #include "ui/control_panel.h"
+#include "ui/player_window.h"
 #include "core/globals.h"
 #include "core/settings.h"
 #include "audio/audio.h"
@@ -24,6 +25,7 @@
 #define CPANEL_BTN_REC_START  3002
 #define CPANEL_BTN_REC_STOP   3003
 #define CPANEL_BTN_SETTINGS   3004
+#define CPANEL_BTN_PLAYER     3005
 
 // Animation state
 static int cpAnimFrame = 0;
@@ -146,6 +148,11 @@ static int GetContentWidth(int height) {
     // Settings Button (Always there?)
     {
         w += margin; // Separator
+        w += 28 + margin;
+    }
+
+    // Player Button (New logic: visible if autoRecordCalls is enabled)
+    if (autoRecordCalls) {
         w += 28 + margin;
     }
     
@@ -552,8 +559,8 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     const char* dots[] = {"●  ", " ● ", "  ●"};
                     
                     ULONGLONG ms = g_CallRecorder->GetRecordingDuration();
-                    int seconds = (ms / 1000) % 60;
-                    int minutes = (ms / 1000) / 60;
+                    int seconds = (int)((ms / 1000) % 60);
+                    int minutes = (int)((ms / 1000) / 60);
                     char timeBuf[32];
                     sprintf_s(timeBuf, "Rec %02d:%02d", minutes, seconds);
                     
@@ -797,6 +804,40 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 DeleteObject(gearPen);
 
                 drawX += btnW + margin;
+            }
+
+             // === Section 7: Player Button (if autoRecordCalls) ===
+            if (autoRecordCalls) {
+                int btnW = 28;
+                int bY = (panelH - btnW) / 2;
+                RECT pRc = {drawX, bY, drawX + btnW, bY + btnW};
+                
+                HBRUSH pBr = CreateSolidBrush(RGB(45, 45, 60));
+                if (cpHoverItem == 6) { // 6 for Player
+                    DeleteObject(pBr);
+                    pBr = CreateSolidBrush(RGB(65, 65, 85));
+                }
+                FillRect(mem, &pRc, pBr);
+                DeleteObject(pBr);
+
+                // Draw Play Icon (Triangle)
+                int pcx = (pRc.left + pRc.right) / 2;
+                int pcy = (pRc.top + pRc.bottom) / 2;
+                
+                HBRUSH playBr = CreateSolidBrush(colorText); // RGB(220, 220, 220)
+                POINT pts[3] = {{pcx - 3, pcy - 5}, {pcx - 3, pcy + 5}, {pcx + 5, pcy}};
+                HRGN rgn = CreatePolygonRgn(pts, 3, WINDING);
+                FillRgn(mem, rgn, playBr);
+                DeleteObject(rgn);
+                DeleteObject(playBr);
+
+                if (cpHoverItem == 6) { // Tooltip
+                    SetTextColor(mem, colorTextDim);
+                    SelectObject(mem, hFontSmall);
+                    RECT rcTip = {pRc.left - 20, pRc.bottom, pRc.right + 20, pRc.bottom + 12};
+                    DrawText(mem, "Player", -1, &rcTip, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+                }
+
                 drawX += btnW + margin;
             }
 
@@ -921,6 +962,14 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 int btnW = 28;
                 int bY = (panelH - btnW) / 2;
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) newHover = 4;
+                drawX += btnW + margin;
+            }
+
+            // Player Button
+            if (autoRecordCalls) {
+                int btnW = 28;
+                int bY = (panelH - btnW) / 2;
+                if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) newHover = 6;
                 drawX += btnW + margin;
             }
             
@@ -1051,6 +1100,18 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
                     // Open settings
                     SendMessage(hMainWnd, WM_COMMAND, ID_TRAY_OPEN, 0);
+                    return 0;
+                }
+                drawX += btnW + margin;
+            }
+
+            // Player Button
+            if (autoRecordCalls) {
+                int btnW = 28;
+                int bY = (panelH - btnW) / 2;
+                if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) {
+                    if (IsPlayerWindowVisible()) ClosePlayerWindow();
+                    else ShowPlayerWindow();
                     return 0;
                 }
                 drawX += btnW + margin;
