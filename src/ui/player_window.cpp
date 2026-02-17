@@ -73,7 +73,6 @@ static void InitThemeColors() {
 static HFONT fTitle   = nullptr;
 static HFONT fNormal  = nullptr;
 static HFONT fSmall   = nullptr;
-static HFONT fIcon    = nullptr; // large icon-like symbols
 static HFONT fMono    = nullptr;
 
 static void InitFonts() {
@@ -84,8 +83,6 @@ static void InitFonts() {
                          0, 0, CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
     fSmall  = CreateFont(-11, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
                          0, 0, CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
-    fIcon   = CreateFont(-20, 0, 0, 0, FW_BOLD,  0, 0, 0, DEFAULT_CHARSET,
-                         0, 0, CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI Symbol");
     fMono   = CreateFont(-12, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
                          0, 0, CLEARTYPE_QUALITY, FIXED_PITCH, "Consolas");
 }
@@ -159,6 +156,119 @@ static void DrawTextCentered(HDC hdc, const char* txt, RECT rc, HFONT font, COLO
     SelectObject(hdc, font);
     SetTextColor(hdc, col);
     DrawTextA(hdc, txt, -1, &rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_END_ELLIPSIS);
+}
+
+// ── GDI icon drawing helpers (replace broken UTF-8 emoji) ─────────────────
+static void DrawPlayTriangle(HDC hdc, int cx, int cy, int sz, COLORREF col) {
+    POINT pts[3] = {{cx - sz/3, cy - sz/2}, {cx - sz/3, cy + sz/2}, {cx + sz/2, cy}};
+    HBRUSH br = CreateSolidBrush(col);
+    HRGN rgn = CreatePolygonRgn(pts, 3, WINDING);
+    FillRgn(hdc, rgn, br);
+    DeleteObject(rgn); DeleteObject(br);
+}
+
+static void DrawPauseIcon(HDC hdc, int cx, int cy, int sz, COLORREF col) {
+    HBRUSH br = CreateSolidBrush(col);
+    int bw = max(2, sz / 5);
+    int gap = max(2, sz / 4);
+    RECT r1 = {cx - gap - bw, cy - sz/2, cx - gap, cy + sz/2};
+    RECT r2 = {cx + gap, cy - sz/2, cx + gap + bw, cy + sz/2};
+    FillRect(hdc, &r1, br); FillRect(hdc, &r2, br);
+    DeleteObject(br);
+}
+
+static void DrawStopSquare(HDC hdc, int cx, int cy, int sz, COLORREF col) {
+    HBRUSH br = CreateSolidBrush(col);
+    int half = sz / 3;
+    RECT r = {cx - half, cy - half, cx + half, cy + half};
+    FillRect(hdc, &r, br);
+    DeleteObject(br);
+}
+
+static void DrawPrevIcon(HDC hdc, int cx, int cy, int sz, COLORREF col) {
+    HBRUSH br = CreateSolidBrush(col);
+    // Bar on left
+    int bw = max(2, sz / 6);
+    RECT bar = {cx - sz/3 - bw, cy - sz/3, cx - sz/3, cy + sz/3};
+    FillRect(hdc, &bar, br);
+    // Triangle pointing left
+    POINT pts[3] = {{cx + sz/3, cy - sz/3}, {cx + sz/3, cy + sz/3}, {cx - sz/3, cy}};
+    HRGN rgn = CreatePolygonRgn(pts, 3, WINDING);
+    FillRgn(hdc, rgn, br);
+    DeleteObject(rgn); DeleteObject(br);
+}
+
+static void DrawNextIcon(HDC hdc, int cx, int cy, int sz, COLORREF col) {
+    HBRUSH br = CreateSolidBrush(col);
+    // Bar on right
+    int bw = max(2, sz / 6);
+    RECT bar = {cx + sz/3, cy - sz/3, cx + sz/3 + bw, cy + sz/3};
+    FillRect(hdc, &bar, br);
+    // Triangle pointing right
+    POINT pts[3] = {{cx - sz/3, cy - sz/3}, {cx - sz/3, cy + sz/3}, {cx + sz/3, cy}};
+    HRGN rgn = CreatePolygonRgn(pts, 3, WINDING);
+    FillRgn(hdc, rgn, br);
+    DeleteObject(rgn); DeleteObject(br);
+}
+
+static void DrawSearchLens(HDC hdc, int cx, int cy, int sz, COLORREF col) {
+    HPEN pen = CreatePen(PS_SOLID, 2, col);
+    HBRUSH nbr = (HBRUSH)GetStockObject(NULL_BRUSH);
+    SelectObject(hdc, pen); SelectObject(hdc, nbr);
+    int r = sz / 3;
+    Ellipse(hdc, cx - r, cy - r, cx + r, cy + r);
+    MoveToEx(hdc, cx + r - 1, cy + r - 1, nullptr);
+    LineTo(hdc, cx + sz/2, cy + sz/2);
+    DeleteObject(pen);
+}
+
+static void DrawFolderIcon(HDC hdc, int cx, int cy, int sz, COLORREF col) {
+    HPEN pen = CreatePen(PS_SOLID, 1, col);
+    HBRUSH nbr = (HBRUSH)GetStockObject(NULL_BRUSH);
+    SelectObject(hdc, pen); SelectObject(hdc, nbr);
+    int hw = sz/2, hh = sz/3;
+    // Folder body
+    Rectangle(hdc, cx - hw, cy - hh + 2, cx + hw, cy + hh);
+    // Tab
+    MoveToEx(hdc, cx - hw, cy - hh + 2, nullptr);
+    LineTo(hdc, cx - hw, cy - hh);
+    LineTo(hdc, cx - hw/3, cy - hh);
+    LineTo(hdc, cx, cy - hh + 2);
+    DeleteObject(pen);
+}
+
+static void DrawSpeakerIcon(HDC hdc, int cx, int cy, int sz, COLORREF col) {
+    HBRUSH br = CreateSolidBrush(col);
+    // Speaker body (small rect)
+    int bw = sz/5, bh = sz/3;
+    RECT body = {cx - sz/3, cy - bh/2, cx - sz/3 + bw, cy + bh/2};
+    FillRect(hdc, &body, br);
+    // Cone (triangle)
+    POINT pts[3] = {{cx - sz/3 + bw, cy - sz/3}, {cx - sz/3 + bw, cy + sz/3}, {cx + sz/6, cy}};
+    // Actually let me make a wider cone
+    POINT cone[4] = {{cx - sz/3 + bw, cy - bh/2}, {cx - sz/3 + bw, cy + bh/2}, {cx, cy + sz/3}, {cx, cy - sz/3}};
+    HRGN rgn = CreatePolygonRgn(cone, 4, WINDING);
+    FillRgn(hdc, rgn, br);
+    DeleteObject(rgn); DeleteObject(br);
+    // Sound waves
+    HPEN pen = CreatePen(PS_SOLID, 1, col);
+    SelectObject(hdc, pen);
+    SelectObject(hdc, (HBRUSH)GetStockObject(NULL_BRUSH));
+    Arc(hdc, cx+2, cy-sz/4, cx+sz/3+2, cy+sz/4, cx+sz/4, cy-sz/4, cx+sz/4, cy+sz/4);
+    DeleteObject(pen);
+}
+
+static void DrawMusicNote(HDC hdc, int cx, int cy, int sz, COLORREF col) {
+    HPEN pen = CreatePen(PS_SOLID, 2, col);
+    HBRUSH br = CreateSolidBrush(col);
+    SelectObject(hdc, pen);
+    // Stem
+    MoveToEx(hdc, cx + 1, cy - sz/3, nullptr);
+    LineTo(hdc, cx + 1, cy + sz/4);
+    // Note head (small ellipse)
+    SelectObject(hdc, br);
+    Ellipse(hdc, cx - 2, cy + sz/6, cx + 3, cy + sz/3 + 1);
+    DeleteObject(pen); DeleteObject(br);
 }
 
 // ─────────────────────────── MCI Wrappers ────────────────────────────────────
@@ -375,11 +485,13 @@ static void PaintPlayer(HWND hWnd) {
 
     // ── Title bar area ──
     {
+        // Draw a small play triangle as the title icon
+        DrawPlayTriangle(mem, margin + 10, y + 14, 16, cAccent);
         SelectObject(mem, fTitle);
         SetTextColor(mem, cText);
-        RECT rc = {margin, y, W - margin, y + 28};
-        DrawTextA(mem, "\xE2\x96\xB6  Recording Player", -1, &rc,
-                  DT_SINGLELINE | DT_VCENTER); // ▶
+        RECT rc = {margin + 24, y, W - margin, y + 28};
+        DrawTextA(mem, "Recording Player", -1, &rc,
+                  DT_SINGLELINE | DT_VCENTER);
         
         // Version tag
         SelectObject(mem, fSmall);
@@ -408,11 +520,8 @@ static void PaintPlayer(HWND hWnd) {
         FillRoundRect(mem, sr, 8, brS);
         DeleteObject(brS);
 
-        // Search icon
-        SelectObject(mem, fNormal);
-        SetTextColor(mem, cTextDim);
-        RECT ico = {margin + 10, y, margin + 30, y + 34};
-        DrawTextA(mem, "\xF0\x9F\x94\x8D", -1, &ico, DT_SINGLELINE | DT_VCENTER); // magnifier emoji
+        // Search icon (drawn lens)
+        DrawSearchLens(mem, margin + 20, y + 17, 18, cTextDim);
 
         // The actual EDIT control is positioned over part of this pill
         if (hSearchEdit) {
@@ -469,9 +578,7 @@ static void PaintPlayer(HWND hWnd) {
         {
             int fbW = 22;
             rcFolderBtn = {W - margin - fbW - 6, hy, W - margin - 6, hy + 16};
-            SetTextColor(mem, hoverZone == HZ_FOLDER ? cAccent : cTextDim);
-            SelectObject(mem, fSmall);
-            DrawTextA(mem, "\xF0\x9F\x93\x82", -1, &rcFolderBtn, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+            DrawFolderIcon(mem, (rcFolderBtn.left + rcFolderBtn.right)/2, (rcFolderBtn.top + rcFolderBtn.bottom)/2, 14, hoverZone == HZ_FOLDER ? cAccent : cTextDim);
         }
 
         // Count badge
@@ -514,12 +621,15 @@ static void PaintPlayer(HWND hWnd) {
                     DeleteObject(hb);
                 }
 
-                // Icon
-                SelectObject(mem, fSmall);
-                SetTextColor(mem, (i == listSelIdx && isPlaying) ? cLive : cAccent);
-                RECT ric = {ir.left + 8, iy, ir.left + 24, iy + itemH};
-                DrawTextA(mem, (i == listSelIdx && isPlaying) ? "\xE2\x96\xB6" : "\xE2\x99\xAA", -1,
-                          &ric, DT_SINGLELINE | DT_VCENTER);
+                // Icon (GDI drawn)
+                {
+                    COLORREF iconCol = (i == listSelIdx && isPlaying) ? cLive : cAccent;
+                    int icx = ir.left + 16, icy = iy + itemH / 2;
+                    if (i == listSelIdx && isPlaying)
+                        DrawPlayTriangle(mem, icx, icy, 10, iconCol);
+                    else
+                        DrawMusicNote(mem, icx, icy, 12, iconCol);
+                }
 
                 // Name
                 SetTextColor(mem, cText);
@@ -643,7 +753,7 @@ static void PaintPlayer(HWND hWnd) {
         {
             HBRUSH b = CreateSolidBrush(hoverZone == HZ_PREV ? cListHover : cPanel);
             FillRoundRect(mem, rcPrev, 6, b); DeleteObject(b);
-            DrawTextCentered(mem, "\xE2\x8F\xAE", rcPrev, fIcon, hoverZone == HZ_PREV ? cAccent : cText);
+            DrawPrevIcon(mem, (rcPrev.left+rcPrev.right)/2, (rcPrev.top+rcPrev.bottom)/2, 24, hoverZone == HZ_PREV ? cAccent : cText);
         }
         startX += btnSz + gap;
 
@@ -652,7 +762,7 @@ static void PaintPlayer(HWND hWnd) {
         {
             HBRUSH b = CreateSolidBrush(hoverZone == HZ_STOP ? cListHover : cPanel);
             FillRoundRect(mem, rcStop, 6, b); DeleteObject(b);
-            DrawTextCentered(mem, "\xE2\x8F\xB9", rcStop, fIcon, hoverZone == HZ_STOP ? cMuted : cText);
+            DrawStopSquare(mem, (rcStop.left+rcStop.right)/2, (rcStop.top+rcStop.bottom)/2, 24, hoverZone == HZ_STOP ? cMuted : cText);
         }
         startX += btnSz + gap;
 
@@ -661,8 +771,11 @@ static void PaintPlayer(HWND hWnd) {
         {
             HBRUSH b = CreateSolidBrush(hoverZone == HZ_PLAY ? cAccentHover : cAccent);
             FillRoundRect(mem, rcPlay, playBtnSz/2, b); DeleteObject(b);
-            const char* sym = (isPlaying) ? "\xE2\x8F\xB8" : "\xE2\x96\xB6";
-            DrawTextCentered(mem, sym, rcPlay, fIcon, RGB(255,255,255));
+            int pcx = (rcPlay.left+rcPlay.right)/2, pcy = (rcPlay.top+rcPlay.bottom)/2;
+            if (isPlaying)
+                DrawPauseIcon(mem, pcx, pcy, 22, RGB(255,255,255));
+            else
+                DrawPlayTriangle(mem, pcx + 2, pcy, 22, RGB(255,255,255));
         }
         startX += playBtnSz + gap;
 
@@ -671,7 +784,7 @@ static void PaintPlayer(HWND hWnd) {
         {
             HBRUSH b = CreateSolidBrush(hoverZone == HZ_NEXT ? cListHover : cPanel);
             FillRoundRect(mem, rcNext, 6, b); DeleteObject(b);
-            DrawTextCentered(mem, "\xE2\x8F\xAD", rcNext, fIcon, hoverZone == HZ_NEXT ? cAccent : cText);
+            DrawNextIcon(mem, (rcNext.left+rcNext.right)/2, (rcNext.top+rcNext.bottom)/2, 24, hoverZone == HZ_NEXT ? cAccent : cText);
         }
         startX += btnSz + gap;
 
@@ -680,12 +793,9 @@ static void PaintPlayer(HWND hWnd) {
 
     // ── Volume bar ──
     {
-        SelectObject(mem, fSmall);
-        SetTextColor(mem, cTextDim);
         int volBarW = 120;
         int vx = (W - volBarW - 40) / 2;
-        RECT vlbl = {vx, y, vx + 30, y + 14};
-        DrawTextA(mem, "\xF0\x9F\x94\x8A", -1, &vlbl, DT_SINGLELINE | DT_VCENTER);
+        DrawSpeakerIcon(mem, vx + 10, y + 7, 16, cTextDim);
 
         rcVol = {vx + 30, y + 3, vx + 30 + volBarW, y + 9};
         HBRUSH vbg = CreateSolidBrush(cSeekBg);
