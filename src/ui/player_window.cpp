@@ -1,300 +1,1051 @@
+// =============================================================================
+//  MicMute-S  |  Modern Recording Player  (fully custom-drawn, dark theme)
+// =============================================================================
 #include "ui/player_window.h"
 #include "core/globals.h"
 #include "core/resource.h"
 #include <windows.h>
+#include <dwmapi.h>
 #include <commctrl.h>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <thread>
 #include <atomic>
 #include <fstream>
 #include <filesystem>
-#include <mmsystem.h> // For PlaySound/mci
+#include <mmsystem.h>
 #include <iomanip>
 #include <sstream>
+#include <cmath>
+#include <cstdio>
+#include <mutex>
 
 #pragma comment(lib, "winmm.lib")
+#pragma comment(lib, "dwmapi.lib")
 
-// Window Dimensions
-#define PLAYER_WIDTH  450
-#define PLAYER_HEIGHT 320
+// ── Dimensions ──────────────────────────────────────────────────────────────
+#define PW_WIDTH   560
+#define PW_HEIGHT  520
 
-// Control IDs
-#define IDC_EDIT_SEARCH  101
-#define IDC_BTN_SEARCH   102
-#define IDC_BTN_PLAY     103
-#define IDC_BTN_PAUSE    104
-#define IDC_BTN_STOP     105
-#define IDC_LBL_STATUS   106
-#define IDC_LBL_FILE     107
-#define IDC_LBL_TIME     108
+// ── Sub-control ID for the hidden search edit ──────────────────────────────
+#define IDC_EDIT_SEARCH  4001
+#define IDC_TIMER_POS    4002
 
-// Global handle
-static HWND hPlayerWnd = nullptr;
-static WNDPROC defaultEditProc = nullptr;
+// ── Theme colours (derived from the global palette) ─────────────────────────
+static COLORREF cBg;
+static COLORREF cPanel;
+static COLORREF cBorder;
+static COLORREF cText;
+static COLORREF cTextDim;
+static COLORREF cAccent;
+static COLORREF cAccentHover;
+static COLORREF cLive;
+static COLORREF cMuted;
+static COLORREF cListHover;
+static COLORREF cListSel;
+static COLORREF cSeekBg;
+static COLORREF cSeekFill;
+static COLORREF cSearchBg;
+static COLORREF cWaveHigh;
+static COLORREF cWaveLow;
 
-// State
+static void InitThemeColors() {
+    cBg          = colorBg;                         // RGB(24,24,32)
+    cPanel       = colorPanelBg;                    // RGB(22,22,30)
+    cBorder      = colorPanelBorder;                // RGB(50,50,70)
+    cText        = colorText;                       // RGB(245,245,250)
+    cTextDim     = colorTextDim;                    // RGB(150,150,170)
+    cAccent      = colorAccent;                     // RGB(98,130,255)
+    cAccentHover = RGB(128, 158, 255);
+    cLive        = colorLive;                       // green
+    cMuted       = colorMuted;                      // red
+    cListHover   = RGB(38, 38, 55);
+    cListSel     = RGB(50, 55, 80);
+    cSeekBg      = RGB(40, 40, 55);
+    cSeekFill    = cAccent;
+    cSearchBg    = RGB(32, 32, 44);
+    cWaveHigh    = cAccent;
+    cWaveLow     = RGB(55, 60, 90);
+}
+
+// ── Fonts (created once) ────────────────────────────────────────────────────
+static HFONT fTitle   = nullptr;
+static HFONT fNormal  = nullptr;
+static HFONT fSmall   = nullptr;
+static HFONT fIcon    = nullptr; // large icon-like symbols
+static HFONT fMono    = nullptr;
+
+static void InitFonts() {
+    if (fTitle) return;
+    fTitle  = CreateFont(-18, 0, 0, 0, FW_BOLD,  0, 0, 0, DEFAULT_CHARSET,
+                         0, 0, CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
+    fNormal = CreateFont(-14, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
+                         0, 0, CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
+    fSmall  = CreateFont(-11, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
+                         0, 0, CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
+    fIcon   = CreateFont(-20, 0, 0, 0, FW_BOLD,  0, 0, 0, DEFAULT_CHARSET,
+                         0, 0, CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI Symbol");
+    fMono   = CreateFont(-12, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
+                         0, 0, CLEARTYPE_QUALITY, FIXED_PITCH, "Consolas");
+}
+
+// ── Window handle ───────────────────────────────────────────────────────────
+static HWND  hPlayerWnd     = nullptr;
+static HWND  hSearchEdit    = nullptr;
+static WNDPROC origEditProc = nullptr;
+
+// ── Playback state ──────────────────────────────────────────────────────────
 static std::string currentAudioPath;
-static bool isPlaying = false;
-static bool isPaused = false;
+static bool   isPlaying  = false;
+static bool   isPaused   = false;
+static DWORD  posCurMs   = 0;
+static DWORD  posTotalMs = 0;
+static float  volume     = 1.0f;     // 0..1
 
-// Helpers
-static void UpdatePlayerUI();
+// ── Recording list ──────────────────────────────────────────────────────────
+struct RecEntry {
+    std::string path;
+    std::string display;   // filename without extension
+    std::string dateStr;   // parent folder name (date)
+    DWORD       sizeKB;
+};
+static std::vector<RecEntry> recList;
+static int  listScrollY  = 0;
+static int  listSelIdx    = -1;
+static int  listHoverIdx  = -1;
+static std::mutex listMtx;
 
-// Search Logic
+// ── Waveform visualiser (fake spectrum bars) ────────────────────────────────
+#define WAVE_BARS 40
+static float waveBars[WAVE_BARS] = {};
+static float waveTargets[WAVE_BARS] = {};
+
+// ── Hit-test zones (computed during paint) ──────────────────────────────────
+enum HitZone { HZ_NONE=0, HZ_PLAY, HZ_STOP, HZ_PREV, HZ_NEXT,
+               HZ_SEEK, HZ_VOL, HZ_SEARCH_BTN, HZ_LIST_ITEM, HZ_FOLDER };
+static RECT rcPlay{}, rcStop{}, rcPrev{}, rcNext{};
+static RECT rcSeek{}, rcVol{}, rcSearchBtn{}, rcListArea{}, rcFolderBtn{};
+static HitZone hoverZone = HZ_NONE;
+static bool seekDragging = false;
+static bool volDragging  = false;
+
+// ── Search state ────────────────────────────────────────────────────────────
+static std::string searchQuery;
+static std::string searchStatus;
+
+// ── Forward declarations ────────────────────────────────────────────────────
+static void UpdatePosition();
+static void PaintPlayer(HWND hWnd);
+static void LoadRecordingList();
+static void PlayFile(const std::string& path);
+
+// ─────────────────────────── Helpers ─────────────────────────────────────────
+static std::string FormatTime(DWORD ms) {
+    int sec = (int)(ms / 1000);
+    int m = sec / 60, s = sec % 60;
+    char buf[16];
+    sprintf_s(buf, "%d:%02d", m, s);
+    return buf;
+}
+
+static void FillRoundRect(HDC hdc, RECT rc, int r, HBRUSH br) {
+    HRGN rgn = CreateRoundRectRgn(rc.left, rc.top, rc.right+1, rc.bottom+1, r, r);
+    FillRgn(hdc, rgn, br);
+    DeleteObject(rgn);
+}
+
+static void DrawTextCentered(HDC hdc, const char* txt, RECT rc, HFONT font, COLORREF col) {
+    SelectObject(hdc, font);
+    SetTextColor(hdc, col);
+    DrawTextA(hdc, txt, -1, &rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_END_ELLIPSIS);
+}
+
+// ─────────────────────────── MCI Wrappers ────────────────────────────────────
+static void MCI_Close() {
+    mciSendStringA("close myAudio", nullptr, 0, nullptr);
+}
+
+static DWORD MCI_GetLength() {
+    char buf[64] = {};
+    mciSendStringA("status myAudio length", buf, sizeof(buf), nullptr);
+    return (DWORD)atoi(buf);
+}
+
+static DWORD MCI_GetPos() {
+    char buf[64] = {};
+    mciSendStringA("status myAudio position", buf, sizeof(buf), nullptr);
+    return (DWORD)atoi(buf);
+}
+
+static void MCI_SetPos(DWORD ms) {
+    char cmd[128];
+    sprintf_s(cmd, "seek myAudio to %u", (unsigned)ms);
+    mciSendStringA(cmd, nullptr, 0, nullptr);
+}
+
+static void MCI_SetVolume(int vol) {  // 0-1000
+    char cmd[128];
+    sprintf_s(cmd, "setaudio myAudio volume to %d", vol);
+    mciSendStringA(cmd, nullptr, 0, nullptr);
+}
+
+static void MCI_Play(const std::string& path) {
+    if (path.empty()) return;
+    MCI_Close();
+    std::string cmd = "open \"" + path + "\" type waveaudio alias myAudio";
+    mciSendStringA(cmd.c_str(), nullptr, 0, nullptr);
+    MCI_SetVolume((int)(volume * 1000));
+    mciSendStringA("play myAudio notify", nullptr, 0, hPlayerWnd);
+    posTotalMs = MCI_GetLength();
+    isPlaying = true;
+    isPaused  = false;
+}
+
+static void MCI_Pause() {
+    mciSendStringA("pause myAudio", nullptr, 0, nullptr);
+    isPaused  = true;
+    isPlaying = false;
+}
+
+static void MCI_Resume() {
+    mciSendStringA("resume myAudio", nullptr, 0, nullptr);
+    isPaused  = false;
+    isPlaying = true;
+}
+
+static void MCI_Stop() {
+    mciSendStringA("stop myAudio", nullptr, 0, nullptr);
+    MCI_Close();
+    isPlaying = false;
+    isPaused  = false;
+    posCurMs  = 0;
+}
+
+// ────────────────────── Recording list scan ──────────────────────────────────
+static void LoadRecordingList() {
+    std::vector<RecEntry> tmp;
+    if (recordingFolder.empty()) return;
+    try {
+        for (auto& e : std::filesystem::recursive_directory_iterator(recordingFolder)) {
+            if (!e.is_regular_file()) continue;
+            auto ext = e.path().extension().string();
+            // lowercase
+            for (auto& c : ext) c = (char)tolower((unsigned char)c);
+            if (ext != ".wav") continue;
+            RecEntry r;
+            r.path    = e.path().string();
+            r.display = e.path().stem().string();
+            r.dateStr = e.path().parent_path().filename().string();
+            r.sizeKB  = (DWORD)(e.file_size() / 1024);
+            tmp.push_back(std::move(r));
+        }
+    } catch (...) {}
+    // Sort newest first (by filename / path descending)
+    std::sort(tmp.begin(), tmp.end(), [](const RecEntry& a, const RecEntry& b) {
+        return a.path > b.path;
+    });
+    std::lock_guard<std::mutex> lk(listMtx);
+    recList = std::move(tmp);
+}
+
+// ────────────────────── Search ───────────────────────────────────────────────
 static std::string FindRecordingByMetadata(const std::string& query) {
     if (query.empty() || recordingFolder.empty()) return "";
-
+    // First: case-insensitive filename match anywhere in list
+    {
+        std::lock_guard<std::mutex> lk(listMtx);
+        std::string ql = query;
+        for (auto& c : ql) c = (char)tolower((unsigned char)c);
+        for (auto& r : recList) {
+            std::string dl = r.display;
+            for (auto& c : dl) c = (char)tolower((unsigned char)c);
+            if (dl.find(ql) != std::string::npos) return r.path;
+        }
+    }
+    // Second: search inside .txt metadata files
     try {
-        // Iterate over all date folders
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(recordingFolder)) {
+        for (auto& entry : std::filesystem::recursive_directory_iterator(recordingFolder)) {
             if (entry.is_regular_file() && entry.path().extension() == ".txt") {
-                // Read file content
                 std::ifstream file(entry.path());
                 if (file.is_open()) {
-                    std::stringstream buffer;
-                    buffer << file.rdbuf();
-                    std::string content = buffer.str();
-                    
-                    // Simple case-insensitive check? Or exact? 
-                    // User said "VoxID/UCid enter krega". Let's do simple substring search.
-                    if (content.find(query) != std::string::npos) {
-                        // Found! Check for corresponding .wav
-                        std::filesystem::path wavPath = entry.path();
-                        wavPath.replace_extension(".wav");
-                        
-                        if (std::filesystem::exists(wavPath)) {
-                            return wavPath.string();
-                        }
+                    std::stringstream buf;
+                    buf << file.rdbuf();
+                    if (buf.str().find(query) != std::string::npos) {
+                        auto wav = entry.path(); wav.replace_extension(".wav");
+                        if (std::filesystem::exists(wav)) return wav.string();
                     }
                 }
             }
         }
-    } catch (...) {
-        // Handle perm errors etc
-    }
+    } catch (...) {}
     return "";
 }
 
-// MCI Playback Wrapper
-static void MCI_Play(const std::string& path) {
-    if (path.empty()) return;
-
-    // Close any existing
-    mciSendString("close myAudio", nullptr, 0, nullptr);
-
-    std::string cmdOpen = "open \"" + path + "\" type waveaudio alias myAudio";
-    mciSendString(cmdOpen.c_str(), nullptr, 0, nullptr);
-
-    mciSendString("play myAudio notify", nullptr, 0, hPlayerWnd);
-    isPlaying = true;
-    isPaused = false;
-    UpdatePlayerUI();
+// ────────────────────── Play a file ─────────────────────────────────────────
+static void PlayFile(const std::string& path) {
+    MCI_Stop();
+    currentAudioPath = path;
+    if (!path.empty()) {
+        MCI_Play(path);
+        // highlight in list
+        std::lock_guard<std::mutex> lk(listMtx);
+        for (int i = 0; i < (int)recList.size(); i++) {
+            if (recList[i].path == path) { listSelIdx = i; break; }
+        }
+    }
+    if (hPlayerWnd) InvalidateRect(hPlayerWnd, nullptr, FALSE);
 }
 
-static void MCI_Pause() {
-    mciSendString("pause myAudio", nullptr, 0, nullptr);
-    isPaused = true;
-    isPlaying = false; // "Active" but not playing
-    UpdatePlayerUI();
+// ────────────────────── Navigate prev / next ────────────────────────────────
+static void PlayPrev() {
+    std::string p;
+    {
+        std::lock_guard<std::mutex> lk(listMtx);
+        if (recList.empty()) return;
+        listSelIdx = (listSelIdx <= 0) ? (int)recList.size()-1 : listSelIdx-1;
+        p = recList[listSelIdx].path;
+    }
+    PlayFile(p);
+}
+static void PlayNext() {
+    std::string p;
+    {
+        std::lock_guard<std::mutex> lk(listMtx);
+        if (recList.empty()) return;
+        listSelIdx = (listSelIdx+1 >= (int)recList.size()) ? 0 : listSelIdx+1;
+        p = recList[listSelIdx].path;
+    }
+    PlayFile(p);
 }
 
-static void MCI_Resume() {
-    mciSendString("resume myAudio", nullptr, 0, nullptr);
-    isPaused = false;
-    isPlaying = true;
-    UpdatePlayerUI();
-}
-
-static void MCI_Stop() {
-    mciSendString("stop myAudio", nullptr, 0, nullptr);
-    mciSendString("close myAudio", nullptr, 0, nullptr);
-    isPlaying = false;
-    isPaused = false;
-    UpdatePlayerUI();
-}
-
-static void UpdatePlayerUI() {
-    if (!hPlayerWnd) return;
-
-    HWND hPlay = GetDlgItem(hPlayerWnd, IDC_BTN_PLAY);
-    HWND hPause = GetDlgItem(hPlayerWnd, IDC_BTN_PAUSE);
-    HWND hStop = GetDlgItem(hPlayerWnd, IDC_BTN_STOP);
-    HWND hFile = GetDlgItem(hPlayerWnd, IDC_LBL_FILE);
-
-    bool hasFile = !currentAudioPath.empty();
-
-    EnableWindow(hPlay, hasFile && (!isPlaying || isPaused));
-    EnableWindow(hPause, hasFile && isPlaying);
-    EnableWindow(hStop, hasFile && (isPlaying || isPaused));
-
-    if (hasFile) {
-        std::filesystem::path p(currentAudioPath);
-        SetWindowText(hFile, p.filename().string().c_str());
-    } else {
-        SetWindowText(hFile, "No file loaded");
+// ────────────────────── Waveform animation ──────────────────────────────────
+static void UpdateWaveform() {
+    for (int i = 0; i < WAVE_BARS; i++) {
+        if (isPlaying) {
+            waveTargets[i] = 0.15f + (float)(rand() % 85) / 100.0f;
+        } else {
+            waveTargets[i] = 0.05f;
+        }
+        waveBars[i] += (waveTargets[i] - waveBars[i]) * 0.25f;
     }
 }
 
+// ────────────────────── Timer tick ──────────────────────────────────────────
+static void UpdatePosition() {
+    if (isPlaying) {
+        posCurMs = MCI_GetPos();
+    }
+    UpdateWaveform();
+    if (hPlayerWnd) InvalidateRect(hPlayerWnd, nullptr, FALSE);
+}
+
+// ────────────────────── Subclassed Edit (Enter = search) ────────────────────
+static LRESULT CALLBACK SearchEditProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_KEYDOWN && wp == VK_RETURN) {
+        SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(IDC_EDIT_SEARCH + 999, 0), 0);
+        return 0;
+    }
+    if (msg == WM_CHAR && wp == '\r') return 0; // suppress beep
+    return CallWindowProc(origEditProc, hWnd, msg, wp, lp);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PAINT — the entire window is custom-drawn
+// ═══════════════════════════════════════════════════════════════════════════
+static void PaintPlayer(HWND hWnd) {
+    PAINTSTRUCT ps;
+    HDC hdc = BeginPaint(hWnd, &ps);
+    RECT wrc; GetClientRect(hWnd, &wrc);
+    int W = wrc.right, H = wrc.bottom;
+
+    // Double-buffer
+    HDC mem = CreateCompatibleDC(hdc);
+    HBITMAP bmp = CreateCompatibleBitmap(hdc, W, H);
+    SelectObject(mem, bmp);
+    SetBkMode(mem, TRANSPARENT);
+
+    // ── Background ──
+    HBRUSH brBg = CreateSolidBrush(cBg);
+    FillRect(mem, &wrc, brBg);
+    DeleteObject(brBg);
+
+    int margin = 16;
+    int y = margin;
+
+    // ── Title bar area ──
+    {
+        SelectObject(mem, fTitle);
+        SetTextColor(mem, cText);
+        RECT rc = {margin, y, W - margin, y + 28};
+        DrawTextA(mem, "\xE2\x96\xB6  Recording Player", -1, &rc,
+                  DT_SINGLELINE | DT_VCENTER); // ▶
+        
+        // Version tag
+        SelectObject(mem, fSmall);
+        SetTextColor(mem, cTextDim);
+        RECT rv = {W - 120, y, W - margin, y + 28};
+        DrawTextA(mem, APP_VERSION, -1, &rv, DT_SINGLELINE | DT_VCENTER | DT_RIGHT);
+        y += 32;
+    }
+
+    // ── Separator ──
+    {
+        HPEN pen = CreatePen(PS_SOLID, 1, cBorder);
+        SelectObject(mem, pen);
+        MoveToEx(mem, margin, y, nullptr);
+        LineTo(mem, W - margin, y);
+        DeleteObject(pen);
+        y += 8;
+    }
+
+    // ── Search bar ──
+    int searchBarY = y;
+    {
+        // Background pill
+        RECT sr = {margin, y, W - margin, y + 34};
+        HBRUSH brS = CreateSolidBrush(cSearchBg);
+        FillRoundRect(mem, sr, 8, brS);
+        DeleteObject(brS);
+
+        // Search icon
+        SelectObject(mem, fNormal);
+        SetTextColor(mem, cTextDim);
+        RECT ico = {margin + 10, y, margin + 30, y + 34};
+        DrawTextA(mem, "\xF0\x9F\x94\x8D", -1, &ico, DT_SINGLELINE | DT_VCENTER); // magnifier emoji
+
+        // The actual EDIT control is positioned over part of this pill
+        if (hSearchEdit) {
+            SetWindowPos(hSearchEdit, nullptr, margin + 32, y + 5, W - margin*2 - 110, 24,
+                         SWP_NOZORDER);
+        }
+
+        // Search button
+        int btnW = 68;
+        rcSearchBtn = {W - margin - btnW, y + 2, W - margin - 2, y + 32};
+        HBRUSH brBtn = CreateSolidBrush(hoverZone == HZ_SEARCH_BTN ? cAccentHover : cAccent);
+        FillRoundRect(mem, rcSearchBtn, 6, brBtn);
+        DeleteObject(brBtn);
+        DrawTextCentered(mem, "Search", rcSearchBtn, fNormal, RGB(255,255,255));
+
+        y += 42;
+    }
+
+    // ── Search status ──
+    if (!searchStatus.empty()) {
+        SelectObject(mem, fSmall);
+        SetTextColor(mem, searchStatus.find("NOT") != std::string::npos ? cMuted : cLive);
+        RECT rc = {margin, y, W - margin, y + 16};
+        DrawTextA(mem, searchStatus.c_str(), -1, &rc, DT_SINGLELINE | DT_VCENTER);
+        y += 20;
+    }
+
+    // ── Recording list ──
+    int listH = 140;
+    rcListArea = {margin, y, W - margin, y + listH};
+    {
+        // List background
+        HBRUSH brList = CreateSolidBrush(cPanel);
+        FillRoundRect(mem, rcListArea, 6, brList);
+        DeleteObject(brList);
+
+        // Border
+        HPEN bp = CreatePen(PS_SOLID, 1, cBorder);
+        HBRUSH nbr = (HBRUSH)GetStockObject(NULL_BRUSH);
+        SelectObject(mem, bp); SelectObject(mem, nbr);
+        RoundRect(mem, rcListArea.left, rcListArea.top, rcListArea.right, rcListArea.bottom, 6, 6);
+        DeleteObject(bp);
+
+        // Header
+        int hy = y + 4;
+        SelectObject(mem, fSmall);
+        SetTextColor(mem, cTextDim);
+        {
+            RECT rh = {margin + 8, hy, margin + 250, hy + 16};
+            DrawTextA(mem, "RECORDINGS", -1, &rh, DT_SINGLELINE | DT_VCENTER);
+        }
+
+        // Open folder button
+        {
+            int fbW = 22;
+            rcFolderBtn = {W - margin - fbW - 6, hy, W - margin - 6, hy + 16};
+            SetTextColor(mem, hoverZone == HZ_FOLDER ? cAccent : cTextDim);
+            SelectObject(mem, fSmall);
+            DrawTextA(mem, "\xF0\x9F\x93\x82", -1, &rcFolderBtn, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+        }
+
+        // Count badge
+        {
+            std::lock_guard<std::mutex> lk(listMtx);
+            char cnt[32]; sprintf_s(cnt, "(%d)", (int)recList.size());
+            RECT rb = {margin + 100, hy, margin + 200, hy + 16};
+            SetTextColor(mem, cTextDim);
+            DrawTextA(mem, cnt, -1, &rb, DT_SINGLELINE | DT_VCENTER);
+        }
+
+        hy += 20;
+
+        // Items
+        HRGN clip = CreateRectRgn(rcListArea.left+1, hy, rcListArea.right-1, rcListArea.bottom-2);
+        SelectClipRgn(mem, clip);
+
+        int itemH = 28;
+        {
+            std::lock_guard<std::mutex> lk(listMtx);
+            int visible = (rcListArea.bottom - hy) / itemH;
+            int maxScroll = max(0, (int)recList.size() - visible);
+            if (listScrollY > maxScroll) listScrollY = maxScroll;
+            if (listScrollY < 0) listScrollY = 0;
+
+            for (int i = listScrollY; i < (int)recList.size(); i++) {
+                int iy = hy + (i - listScrollY) * itemH;
+                if (iy >= rcListArea.bottom) break;
+
+                RECT ir = {rcListArea.left + 2, iy, rcListArea.right - 2, iy + itemH};
+
+                // Highlight
+                if (i == listSelIdx) {
+                    HBRUSH hb = CreateSolidBrush(cListSel);
+                    FillRect(mem, &ir, hb);
+                    DeleteObject(hb);
+                } else if (i == listHoverIdx) {
+                    HBRUSH hb = CreateSolidBrush(cListHover);
+                    FillRect(mem, &ir, hb);
+                    DeleteObject(hb);
+                }
+
+                // Icon
+                SelectObject(mem, fSmall);
+                SetTextColor(mem, (i == listSelIdx && isPlaying) ? cLive : cAccent);
+                RECT ric = {ir.left + 8, iy, ir.left + 24, iy + itemH};
+                DrawTextA(mem, (i == listSelIdx && isPlaying) ? "\xE2\x96\xB6" : "\xE2\x99\xAA", -1,
+                          &ric, DT_SINGLELINE | DT_VCENTER);
+
+                // Name
+                SetTextColor(mem, cText);
+                SelectObject(mem, fNormal);
+                RECT rn = {ir.left + 28, iy, ir.right - 90, iy + itemH};
+                DrawTextA(mem, recList[i].display.c_str(), -1, &rn,
+                          DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+
+                // Date + size
+                SelectObject(mem, fSmall);
+                SetTextColor(mem, cTextDim);
+                char meta[64];
+                sprintf_s(meta, "%s  %uKB", recList[i].dateStr.c_str(), recList[i].sizeKB);
+                RECT rm = {ir.right - 140, iy, ir.right - 6, iy + itemH};
+                DrawTextA(mem, meta, -1, &rm, DT_SINGLELINE | DT_VCENTER | DT_RIGHT);
+            }
+        }
+        SelectClipRgn(mem, nullptr);
+        DeleteObject(clip);
+
+        y += listH + 8;
+    }
+
+    // ── Now Playing info ──
+    {
+        SelectObject(mem, fSmall);
+        SetTextColor(mem, cTextDim);
+        RECT rn = {margin, y, W - margin, y + 16};
+        DrawTextA(mem, "NOW PLAYING", -1, &rn, DT_SINGLELINE | DT_VCENTER);
+        y += 18;
+
+        SelectObject(mem, fNormal);
+        SetTextColor(mem, cText);
+        std::string disp = currentAudioPath.empty()
+            ? "No file loaded"
+            : std::filesystem::path(currentAudioPath).stem().string();
+        RECT rf = {margin, y, W - margin, y + 20};
+        DrawTextA(mem, disp.c_str(), -1, &rf, DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+        y += 24;
+    }
+
+    // ── Waveform visualiser ──
+    {
+        int waveH = 36;
+        RECT wr = {margin, y, W - margin, y + waveH};
+        HBRUSH brW = CreateSolidBrush(RGB(28, 28, 38));
+        FillRoundRect(mem, wr, 4, brW);
+        DeleteObject(brW);
+
+        int barW = (W - margin * 2 - WAVE_BARS) / WAVE_BARS;
+        for (int i = 0; i < WAVE_BARS; i++) {
+            int bx = margin + 2 + i * (barW + 1);
+            int bh = (int)(waveBars[i] * (waveH - 6));
+            if (bh < 2) bh = 2;
+            int by = y + waveH - 3 - bh;
+
+            // Gradient: use accent for tall bars, dim for short ones
+            float t = waveBars[i];
+            int r1 = GetRValue(cWaveLow), g1 = GetGValue(cWaveLow), b1 = GetBValue(cWaveLow);
+            int r2 = GetRValue(cWaveHigh), g2 = GetGValue(cWaveHigh), b2 = GetBValue(cWaveHigh);
+            COLORREF bc = RGB(r1 + (int)(t*(r2-r1)), g1 + (int)(t*(g2-g1)), b1 + (int)(t*(b2-b1)));
+            HBRUSH bb = CreateSolidBrush(bc);
+            RECT br2r = {bx, by, bx + barW, y + waveH - 3};
+            FillRect(mem, &br2r, bb);
+            DeleteObject(bb);
+        }
+        y += waveH + 6;
+    }
+
+    // ── Seek bar ──
+    {
+        rcSeek = {margin, y, W - margin, y + 8};
+        // Background
+        HBRUSH bg = CreateSolidBrush(cSeekBg);
+        FillRoundRect(mem, rcSeek, 4, bg);
+        DeleteObject(bg);
+
+        // Progress fill
+        float pct = (posTotalMs > 0) ? (float)posCurMs / posTotalMs : 0.0f;
+        if (pct > 1.0f) pct = 1.0f;
+        int fillW = (int)(pct * (rcSeek.right - rcSeek.left));
+        if (fillW > 0) {
+            RECT rf = {rcSeek.left, rcSeek.top, rcSeek.left + fillW, rcSeek.bottom};
+            HBRUSH fb = CreateSolidBrush(cSeekFill);
+            FillRoundRect(mem, rf, 4, fb);
+            DeleteObject(fb);
+        }
+        // Thumb
+        int tx = rcSeek.left + fillW;
+        if (isPlaying || isPaused) {
+            HBRUSH tb = CreateSolidBrush(RGB(255,255,255));
+            RECT tr = {tx - 5, rcSeek.top - 3, tx + 5, rcSeek.bottom + 3};
+            FillRoundRect(mem, tr, 5, tb);
+            DeleteObject(tb);
+        }
+
+        y += 14;
+        // Time labels
+        SelectObject(mem, fMono);
+        SetTextColor(mem, cTextDim);
+        std::string tCur  = FormatTime(posCurMs);
+        std::string tTot  = FormatTime(posTotalMs);
+        RECT rl = {margin, y, margin + 60, y + 14};
+        DrawTextA(mem, tCur.c_str(), -1, &rl, DT_SINGLELINE | DT_VCENTER);
+        RECT rr = {W - margin - 60, y, W - margin, y + 14};
+        DrawTextA(mem, tTot.c_str(), -1, &rr, DT_SINGLELINE | DT_VCENTER | DT_RIGHT);
+        y += 20;
+    }
+
+    // ── Transport controls (centred) ──
+    {
+        int btnSz = 38;
+        int playBtnSz = 48;
+        int gap = 16;
+        int totalW = btnSz + gap + btnSz + gap + playBtnSz + gap + btnSz + gap + btnSz;
+        int startX = (W - totalW) / 2;
+        int cy = y + playBtnSz / 2;
+
+        // Prev ⏮
+        rcPrev = {startX, cy - btnSz/2, startX + btnSz, cy + btnSz/2};
+        {
+            HBRUSH b = CreateSolidBrush(hoverZone == HZ_PREV ? cListHover : cPanel);
+            FillRoundRect(mem, rcPrev, 6, b); DeleteObject(b);
+            DrawTextCentered(mem, "\xE2\x8F\xAE", rcPrev, fIcon, hoverZone == HZ_PREV ? cAccent : cText);
+        }
+        startX += btnSz + gap;
+
+        // Stop ⏹
+        rcStop = {startX, cy - btnSz/2, startX + btnSz, cy + btnSz/2};
+        {
+            HBRUSH b = CreateSolidBrush(hoverZone == HZ_STOP ? cListHover : cPanel);
+            FillRoundRect(mem, rcStop, 6, b); DeleteObject(b);
+            DrawTextCentered(mem, "\xE2\x8F\xB9", rcStop, fIcon, hoverZone == HZ_STOP ? cMuted : cText);
+        }
+        startX += btnSz + gap;
+
+        // Play/Pause ▶ / ⏸  (bigger)
+        rcPlay = {startX, cy - playBtnSz/2, startX + playBtnSz, cy + playBtnSz/2};
+        {
+            HBRUSH b = CreateSolidBrush(hoverZone == HZ_PLAY ? cAccentHover : cAccent);
+            FillRoundRect(mem, rcPlay, playBtnSz/2, b); DeleteObject(b);
+            const char* sym = (isPlaying) ? "\xE2\x8F\xB8" : "\xE2\x96\xB6";
+            DrawTextCentered(mem, sym, rcPlay, fIcon, RGB(255,255,255));
+        }
+        startX += playBtnSz + gap;
+
+        // Next ⏭
+        rcNext = {startX, cy - btnSz/2, startX + btnSz, cy + btnSz/2};
+        {
+            HBRUSH b = CreateSolidBrush(hoverZone == HZ_NEXT ? cListHover : cPanel);
+            FillRoundRect(mem, rcNext, 6, b); DeleteObject(b);
+            DrawTextCentered(mem, "\xE2\x8F\xAD", rcNext, fIcon, hoverZone == HZ_NEXT ? cAccent : cText);
+        }
+        startX += btnSz + gap;
+
+        y += playBtnSz + 10;
+    }
+
+    // ── Volume bar ──
+    {
+        SelectObject(mem, fSmall);
+        SetTextColor(mem, cTextDim);
+        int volBarW = 120;
+        int vx = (W - volBarW - 40) / 2;
+        RECT vlbl = {vx, y, vx + 30, y + 14};
+        DrawTextA(mem, "\xF0\x9F\x94\x8A", -1, &vlbl, DT_SINGLELINE | DT_VCENTER);
+
+        rcVol = {vx + 30, y + 3, vx + 30 + volBarW, y + 9};
+        HBRUSH vbg = CreateSolidBrush(cSeekBg);
+        FillRoundRect(mem, rcVol, 3, vbg); DeleteObject(vbg);
+        int vfill = (int)(volume * volBarW);
+        RECT vfr = {rcVol.left, rcVol.top, rcVol.left + vfill, rcVol.bottom};
+        HBRUSH vfb = CreateSolidBrush(cAccent);
+        FillRoundRect(mem, vfr, 3, vfb); DeleteObject(vfb);
+
+        // volume pct
+        char vpct[16]; sprintf_s(vpct, "%d%%", (int)(volume * 100));
+        RECT vpr = {rcVol.right + 6, y, rcVol.right + 50, y + 14};
+        SetTextColor(mem, cTextDim);
+        DrawTextA(mem, vpct, -1, &vpr, DT_SINGLELINE | DT_VCENTER);
+    }
+
+    BitBlt(hdc, 0, 0, W, H, mem, 0, 0, SRCCOPY);
+    DeleteObject(bmp);
+    DeleteDC(mem);
+    EndPaint(hWnd, &ps);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  HIT TESTING
+// ═══════════════════════════════════════════════════════════════════════════
+static bool PtInR(RECT r, int x, int y) {
+    POINT p = {x, y};
+    return PtInRect(&r, p);
+}
+
+static HitZone HitTest(int x, int y) {
+    if (PtInR(rcPlay, x, y))      return HZ_PLAY;
+    if (PtInR(rcStop, x, y))      return HZ_STOP;
+    if (PtInR(rcPrev, x, y))      return HZ_PREV;
+    if (PtInR(rcNext, x, y))      return HZ_NEXT;
+    if (PtInR(rcSearchBtn, x, y)) return HZ_SEARCH_BTN;
+    if (PtInR(rcFolderBtn, x, y)) return HZ_FOLDER;
+    // Seek — widen vertically for easier clicking
+    {
+        RECT sr = rcSeek; sr.top -= 6; sr.bottom += 6;
+        if (PtInR(sr, x, y)) return HZ_SEEK;
+    }
+    {
+        RECT vr = rcVol; vr.top -= 6; vr.bottom += 6;
+        if (PtInR(vr, x, y)) return HZ_VOL;
+    }
+    if (PtInR(rcListArea, x, y)) return HZ_LIST_ITEM;
+    return HZ_NONE;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  WINDOW PROCEDURE
+// ═══════════════════════════════════════════════════════════════════════════
 static LRESULT CALLBACK PlayerWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
-        case WM_CREATE: {
-            // Background
-            
-            // 1. Search Label
-            CreateWindowExA(0, "STATIC", "Enter VoxID / UCid:", WS_VISIBLE | WS_CHILD | SS_CENTERIMAGE, 
-                20, 20, 150, 24, hWnd, nullptr, nullptr, nullptr);
 
-            // 2. Search Edit
-            CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "", WS_VISIBLE | WS_CHILD | 
-                ES_AUTOHSCROLL, 20, 50, 280, 28, hWnd, (HMENU)IDC_EDIT_SEARCH, nullptr, nullptr);
+    case WM_CREATE: {
+        InitThemeColors();
+        InitFonts();
 
-            // 3. Search Button
-            CreateWindowExA(0, "BUTTON", "Search", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-                310, 50, 100, 28, hWnd, (HMENU)IDC_BTN_SEARCH, nullptr, nullptr);
+        // Hidden edit control for search input
+        hSearchEdit = CreateWindowExA(0, "EDIT", "",
+            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+            0, 0, 100, 24, hWnd, (HMENU)IDC_EDIT_SEARCH, GetModuleHandle(nullptr), nullptr);
+        SendMessage(hSearchEdit, WM_SETFONT, (WPARAM)fNormal, TRUE);
 
-            // Separator line logic would be in Paint, keep simple for now
+        // Subclass to capture Enter key
+        origEditProc = (WNDPROC)SetWindowLongPtr(hSearchEdit, GWLP_WNDPROC, (LONG_PTR)SearchEditProc);
 
-            // 4. File Info
-            CreateWindowExA(0, "STATIC", "File Status", WS_VISIBLE | WS_CHILD | SS_CENTERIMAGE, 
-                 20, 100, 400, 24, hWnd, (HMENU)IDC_LBL_STATUS, nullptr, nullptr);
-            
-            CreateWindowExA(0, "STATIC", "No file loaded", WS_VISIBLE | WS_CHILD | SS_CENTER | SS_ENDELLIPSIS, 
-                 20, 130, 410, 40, hWnd, (HMENU)IDC_LBL_FILE, nullptr, nullptr);
+        // Style the edit control for dark theme
+        // (we'll handle WM_CTLCOLOREDIT)
 
-            // 5. Controls
-            int btnW = 100;
-            int btnH = 40;
-            int startX = (PLAYER_WIDTH - (btnW * 3 + 20)) / 2;
-            int y = 200;
+        // Position timer for seek bar
+        SetTimer(hWnd, IDC_TIMER_POS, 80, nullptr);
 
-            CreateWindowExA(0, "BUTTON", "Play", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | WS_DISABLED,
-                startX, y, btnW, btnH, hWnd, (HMENU)IDC_BTN_PLAY, nullptr, nullptr);
+        // Load recordings in background
+        std::thread([]() {
+            LoadRecordingList();
+            if (hPlayerWnd) PostMessage(hPlayerWnd, WM_USER + 10, 0, 0);
+        }).detach();
 
-            CreateWindowExA(0, "BUTTON", "Pause", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | WS_DISABLED,
-                startX + btnW + 10, y, btnW, btnH, hWnd, (HMENU)IDC_BTN_PAUSE, nullptr, nullptr);
-            
-            CreateWindowExA(0, "BUTTON", "Stop", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | WS_DISABLED,
-                startX + (btnW + 10) * 2, y, btnW, btnH, hWnd, (HMENU)IDC_BTN_STOP, nullptr, nullptr);
+        return 0;
+    }
 
-            // Font setting
-            EnumChildWindows(hWnd, [](HWND hChild, LPARAM) -> BOOL {
-                SendMessage(hChild, WM_SETFONT, (WPARAM)GetStockObject(DEFAULT_GUI_FONT), TRUE);
-                return TRUE;
-            }, 0);
+    case WM_TIMER:
+        if (wParam == IDC_TIMER_POS) UpdatePosition();
+        return 0;
 
+    case WM_PAINT:
+        PaintPlayer(hWnd);
+        return 0;
+
+    case WM_ERASEBKGND:
+        return 1; // handled in WM_PAINT double-buffer
+
+    case WM_CTLCOLOREDIT: {
+        HDC hdc = (HDC)wParam;
+        SetTextColor(hdc, cText);
+        SetBkColor(hdc, cSearchBg);
+        static HBRUSH brEdit = CreateSolidBrush(cSearchBg);
+        return (LRESULT)brEdit;
+    }
+
+    case WM_MOUSEMOVE: {
+        int x = LOWORD(lParam), y = HIWORD(lParam);
+
+        if (seekDragging) {
+            float pct = (float)(x - rcSeek.left) / (rcSeek.right - rcSeek.left);
+            pct = max(0.0f, min(1.0f, pct));
+            posCurMs = (DWORD)(pct * posTotalMs);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+        if (volDragging) {
+            float pct = (float)(x - rcVol.left) / (rcVol.right - rcVol.left);
+            volume = max(0.0f, min(1.0f, pct));
+            MCI_SetVolume((int)(volume * 1000));
+            InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
         }
 
-        case WM_COMMAND: {
-            int id = LOWORD(wParam);
-            if (id == IDC_BTN_SEARCH) {
-                char buf[256];
-                GetDlgItemText(hWnd, IDC_EDIT_SEARCH, buf, 256);
-                std::string query = buf;
-                
-                SetDlgItemText(hWnd, IDC_LBL_STATUS, "Searching...");
-                currentAudioPath = "";
-                MCI_Stop();
+        HitZone hz = HitTest(x, y);
+        if (hz != hoverZone) { hoverZone = hz; InvalidateRect(hWnd, nullptr, FALSE); }
 
-                std::thread([hWnd, query]() {
-                    std::string result = FindRecordingByMetadata(query);
-                    PostMessage(hWnd, WM_USER + 1, 0, (LPARAM)new std::string(result));
-                }).detach();
+        // List hover
+        if (hz == HZ_LIST_ITEM) {
+            int itemH = 28;
+            int headerH = 24; // offset for header inside list
+            int idx = listScrollY + (y - rcListArea.top - headerH) / itemH;
+            std::lock_guard<std::mutex> lk(listMtx);
+            if (idx >= 0 && idx < (int)recList.size() && idx != listHoverIdx) {
+                listHoverIdx = idx;
+                InvalidateRect(hWnd, nullptr, FALSE);
             }
-            else if (id == IDC_BTN_PLAY) {
-                if (isPaused) MCI_Resume();
-                else MCI_Play(currentAudioPath);
-            }
-            else if (id == IDC_BTN_PAUSE) {
-                MCI_Pause();
-            }
-            else if (id == IDC_BTN_STOP) {
-                MCI_Stop();
-            }
-            break;
+        } else if (listHoverIdx >= 0) {
+            listHoverIdx = -1;
+            InvalidateRect(hWnd, nullptr, FALSE);
         }
 
-        case WM_USER + 1: { // Search Result
-            std::string* pRes = (std::string*)lParam;
-            if (pRes) {
-                if (!pRes->empty()) {
-                    currentAudioPath = *pRes;
-                    SetDlgItemText(hWnd, IDC_LBL_STATUS, "Result: Found!");
-                } else {
-                    currentAudioPath = "";
-                    SetDlgItemText(hWnd, IDC_LBL_STATUS, "Result: Recording NOT found.");
-                }
-                UpdatePlayerUI();
-                delete pRes;
-            }
-            break;
-        }
-
-        case MM_MCINOTIFY: {
-            if (wParam == MCI_NOTIFY_SUCCESSFUL) {
-                // Playback finished
-                isPlaying = false;
-                isPaused = false;
-                UpdatePlayerUI();
-            }
-            break;
-        }
-
-        case WM_CLOSE:
-            MCI_Stop();
-            ShowWindow(hWnd, SW_HIDE);
-            return 0; // Don't destroy, just hide
-            
-        case WM_CTLCOLORSTATIC: {
-             HDC hdcStatic = (HDC)wParam;
-             SetBkMode(hdcStatic, TRANSPARENT);
-             return (LRESULT)GetStockObject(NULL_BRUSH); // Or white brush
-        }
-        
+        TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, hWnd, 0};
+        TrackMouseEvent(&tme);
+        return 0;
     }
+
+    case WM_MOUSELEAVE:
+        hoverZone = HZ_NONE;
+        listHoverIdx = -1;
+        InvalidateRect(hWnd, nullptr, FALSE);
+        return 0;
+
+    case WM_LBUTTONDOWN: {
+        int x = LOWORD(lParam), y = HIWORD(lParam);
+        HitZone hz = HitTest(x, y);
+
+        if (hz == HZ_SEEK && posTotalMs > 0) {
+            seekDragging = true;
+            SetCapture(hWnd);
+            float pct = (float)(x - rcSeek.left) / (rcSeek.right - rcSeek.left);
+            pct = max(0.0f, min(1.0f, pct));
+            posCurMs = (DWORD)(pct * posTotalMs);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+        if (hz == HZ_VOL) {
+            volDragging = true;
+            SetCapture(hWnd);
+            float pct = (float)(x - rcVol.left) / (rcVol.right - rcVol.left);
+            volume = max(0.0f, min(1.0f, pct));
+            MCI_SetVolume((int)(volume * 1000));
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+
+        if (hz == HZ_PLAY) {
+            if (isPlaying) MCI_Pause();
+            else if (isPaused) MCI_Resume();
+            else if (!currentAudioPath.empty()) MCI_Play(currentAudioPath);
+            else {
+                // Try playing first in list
+                std::string p;
+                {
+                    std::lock_guard<std::mutex> lk(listMtx);
+                    if (!recList.empty()) {
+                        listSelIdx = 0;
+                        p = recList[0].path;
+                    }
+                }
+                if (!p.empty()) PlayFile(p);
+            }
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+        if (hz == HZ_STOP)  { MCI_Stop(); InvalidateRect(hWnd, nullptr, FALSE); return 0; }
+        if (hz == HZ_PREV)  { PlayPrev(); return 0; }
+        if (hz == HZ_NEXT)  { PlayNext(); return 0; }
+
+        if (hz == HZ_SEARCH_BTN) {
+            SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(IDC_EDIT_SEARCH + 999, 0), 0);
+            return 0;
+        }
+        if (hz == HZ_FOLDER) {
+            if (!recordingFolder.empty())
+                ShellExecuteA(nullptr, "open", recordingFolder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            return 0;
+        }
+
+        if (hz == HZ_LIST_ITEM) {
+            int itemH = 28;
+            int headerH = 24;
+            int idx = listScrollY + (y - rcListArea.top - headerH) / itemH;
+            std::string p;
+            {
+                std::lock_guard<std::mutex> lk(listMtx);
+                if (idx >= 0 && idx < (int)recList.size()) {
+                    listSelIdx = idx;
+                    p = recList[idx].path;
+                }
+            }
+            if (!p.empty()) PlayFile(p);
+            return 0;
+        }
+        return 0;
+    }
+
+    case WM_LBUTTONUP:
+        if (seekDragging) {
+            seekDragging = false;
+            ReleaseCapture();
+            MCI_SetPos(posCurMs);
+            if (isPlaying || isPaused) {
+                mciSendStringA("play myAudio notify", nullptr, 0, hPlayerWnd);
+                isPlaying = true; isPaused = false;
+            }
+        }
+        if (volDragging) {
+            volDragging = false;
+            ReleaseCapture();
+        }
+        return 0;
+
+    case WM_MOUSEWHEEL: {
+        int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+        // Check if cursor is over list
+        POINT pt; GetCursorPos(&pt); ScreenToClient(hWnd, &pt);
+        if (PtInR(rcListArea, pt.x, pt.y)) {
+            listScrollY -= delta / 40;
+            if (listScrollY < 0) listScrollY = 0;
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        return 0;
+    }
+
+    case WM_COMMAND: {
+        int id = LOWORD(wParam);
+        if (id == IDC_EDIT_SEARCH + 999) {
+            // Trigger search
+            char buf[256] = {};
+            GetWindowTextA(hSearchEdit, buf, 256);
+            searchQuery = buf;
+            if (searchQuery.empty()) return 0;
+            searchStatus = "Searching...";
+            InvalidateRect(hWnd, nullptr, FALSE);
+            std::thread([hWnd]() {
+                std::string q = searchQuery;
+                std::string result = FindRecordingByMetadata(q);
+                PostMessage(hWnd, WM_USER + 1, 0, (LPARAM)new std::string(result));
+            }).detach();
+        }
+        return 0;
+    }
+
+    case WM_USER + 1: { // search result
+        std::string* p = (std::string*)lParam;
+        if (p) {
+            if (!p->empty()) {
+                searchStatus = "Found!";
+                PlayFile(*p);
+            } else {
+                searchStatus = "Recording NOT found.";
+            }
+            delete p;
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        return 0;
+    }
+
+    case WM_USER + 10: // list loaded
+        InvalidateRect(hWnd, nullptr, FALSE);
+        return 0;
+
+    case MM_MCINOTIFY:
+        if (wParam == MCI_NOTIFY_SUCCESSFUL) {
+            isPlaying = false; isPaused = false;
+            // Auto-next
+            PlayNext();
+        }
+        return 0;
+
+    case WM_KEYDOWN:
+        if (wParam == VK_SPACE) {
+            if (isPlaying) MCI_Pause();
+            else if (isPaused) MCI_Resume();
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+        if (wParam == VK_LEFT  && (GetKeyState(VK_CONTROL) & 0x8000)) { PlayPrev(); return 0; }
+        if (wParam == VK_RIGHT && (GetKeyState(VK_CONTROL) & 0x8000)) { PlayNext(); return 0; }
+        break;
+
+    case WM_CLOSE:
+        MCI_Stop();
+        ShowWindow(hWnd, SW_HIDE);
+        return 0;
+
+    case WM_GETMINMAXINFO: {
+        MINMAXINFO* mm = (MINMAXINFO*)lParam;
+        mm->ptMinTrackSize = {440, 480};
+        return 0;
+    }
+
+    } // switch
     return DefWindowProc(hWnd, msg, wParam, lParam);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  PUBLIC API
+// ═══════════════════════════════════════════════════════════════════════════
 void CreatePlayerWindow(HINSTANCE hInstance) {
     if (hPlayerWnd) return;
 
-    WNDCLASSEX wc = {0};
-    wc.cbSize = sizeof(WNDCLASSEX);
-    wc.style = CS_HREDRAW | CS_VREDRAW;
-    wc.lpfnWndProc = PlayerWndProc;
-    wc.hInstance = hInstance;
-    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    WNDCLASSEX wc = {};
+    wc.cbSize        = sizeof(WNDCLASSEX);
+    wc.style         = CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc   = PlayerWndProc;
+    wc.hInstance      = hInstance;
+    wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
+    wc.hbrBackground = nullptr; // we paint everything
     wc.lpszClassName = "MicMuteS_Player";
-    
-    if (!RegisterClassEx(&wc)) {
-        OutputDebugString("MicMuteS: Player Class Registration Failed!\n");
-    } else {
-        OutputDebugString("MicMuteS: Player Class Registered.\n");
-    }
+    wc.hIcon         = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+    wc.hIconSm       = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+
+    RegisterClassEx(&wc);
 
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
-    int x = (screenW - PLAYER_WIDTH) / 2;
-    int y = (screenH - PLAYER_HEIGHT) / 2;
+    int x = (screenW - PW_WIDTH) / 2;
+    int y = (screenH - PW_HEIGHT) / 2;
 
-    hPlayerWnd = CreateWindowEx(
-        WS_EX_TOPMOST | WS_EX_TOOLWINDOW, // Keep on top
-        "MicMuteS_Player", "Recording Player",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        x, y, PLAYER_WIDTH, PLAYER_HEIGHT,
-        nullptr, nullptr, hInstance, nullptr
-    );
+    hPlayerWnd = CreateWindowExA(
+        WS_EX_APPWINDOW,
+        "MicMuteS_Player", "MicMute-S  |  Recording Player",
+        WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX,
+        x, y, PW_WIDTH, PW_HEIGHT,
+        nullptr, nullptr, hInstance, nullptr);
 
-    if (!hPlayerWnd) {
-        OutputDebugString("MicMuteS: Player Window Creation Failed!\n");
-        // GetLastError logic could be added here
-        char buf[64];
-        sprintf_s(buf, "Error: %d\n", GetLastError());
-        OutputDebugString(buf);
-    } else {
-        OutputDebugString("MicMuteS: Player Window Created.\n");
+    if (hPlayerWnd) {
+        // Dark title bar (Windows 10 1809+)
+        BOOL useDark = TRUE;
+        DwmSetWindowAttribute(hPlayerWnd, 20 /*DWMWA_USE_IMMERSIVE_DARK_MODE*/,
+                              &useDark, sizeof(useDark));
     }
 }
 
@@ -305,6 +1056,11 @@ void ShowPlayerWindow() {
     if (hPlayerWnd) {
         ShowWindow(hPlayerWnd, SW_SHOW);
         SetForegroundWindow(hPlayerWnd);
+        // Refresh list
+        std::thread([]() {
+            LoadRecordingList();
+            if (hPlayerWnd) PostMessage(hPlayerWnd, WM_USER + 10, 0, 0);
+        }).detach();
     }
 }
 
