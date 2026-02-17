@@ -927,7 +927,11 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 if (x >= drawX && x <= drawX + btnSize && y >= margin && y <= panelH - margin) {
                     newHover = 0;
                 }
-                drawX += btnSize + margin * 2; // + separator info
+                drawX += btnSize + margin;
+                // Separator
+                if (showVoiceMeter || (isDevModeEnabled && (showRecStatus || showManualRec || showCallStats))) {
+                    drawX += margin;
+                }
             }
             
             if (showVoiceMeter) drawX += 120 + margin * 2;
@@ -952,6 +956,11 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 int bY = (panelH - btnW) / 2;
                 if (x >= drawX && x <= drawX + btnW && y >= bY && y <= bY + btnW) newHover = 3;
                 drawX += btnW + margin;
+                
+                // Separator check needs to allow for Folder button being present
+                if (showCallStats) {
+                     drawX += margin;
+                }
             }
 
             if (showCallStats && isDevModeEnabled) drawX += 100 + margin;
@@ -1055,7 +1064,12 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     InvalidateRect(hWnd, nullptr, FALSE);
                     return 0;
                 }
-                drawX += btnSize + margin * 2;
+                drawX += btnSize + margin;
+                
+                // Separator
+                if (showVoiceMeter || (isDevModeEnabled && (showRecStatus || showManualRec || showCallStats))) {
+                    drawX += margin;
+                }
             }
             
             if (showVoiceMeter) drawX += 120 + margin * 2;
@@ -1088,6 +1102,11 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     return 0;
                 }
                 drawX += btnW + margin;
+                
+                // Separator check needs to allow for Folder button being present
+                if (showCallStats) {
+                     drawX += margin;
+                }
             }
             
             if (showCallStats && isDevModeEnabled) drawX += 100 + margin;
