@@ -5,6 +5,7 @@
 #include "core/globals.h"
 #include "core/resource.h"
 #include <windows.h>
+#include <windowsx.h>
 #include <dwmapi.h>
 #include <commctrl.h>
 #include <string>
@@ -129,6 +130,7 @@ static bool volDragging  = false;
 
 // ── Search state ────────────────────────────────────────────────────────────
 static std::string searchQuery;
+static std::mutex searchMtx;
 static std::string searchStatus;
 
 // ── Forward declarations ────────────────────────────────────────────────────
@@ -327,9 +329,10 @@ static void MCI_Resume() {
 static void MCI_Stop() {
     mciSendStringA("stop myAudio", nullptr, 0, nullptr);
     MCI_Close();
-    isPlaying = false;
-    isPaused  = false;
-    posCurMs  = 0;
+    isPlaying  = false;
+    isPaused   = false;
+    posCurMs   = 0;
+    posTotalMs = 0;
 }
 
 // ────────────────────── Recording list scan ──────────────────────────────────
@@ -895,12 +898,18 @@ static LRESULT CALLBACK PlayerWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
         HDC hdc = (HDC)wParam;
         SetTextColor(hdc, cText);
         SetBkColor(hdc, cSearchBg);
-        static HBRUSH brEdit = CreateSolidBrush(cSearchBg);
+        static HBRUSH brEdit = nullptr;
+        static COLORREF lastSearchBg = 0;
+        if (!brEdit || lastSearchBg != cSearchBg) {
+            if (brEdit) DeleteObject(brEdit);
+            brEdit = CreateSolidBrush(cSearchBg);
+            lastSearchBg = cSearchBg;
+        }
         return (LRESULT)brEdit;
     }
 
     case WM_MOUSEMOVE: {
-        int x = LOWORD(lParam), y = HIWORD(lParam);
+        int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
 
         if (seekDragging) {
             float pct = (float)(x - rcSeek.left) / (rcSeek.right - rcSeek.left);
@@ -947,7 +956,7 @@ static LRESULT CALLBACK PlayerWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
         return 0;
 
     case WM_LBUTTONDOWN: {
-        int x = LOWORD(lParam), y = HIWORD(lParam);
+        int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
         HitZone hz = HitTest(x, y);
 
         if (hz == HZ_SEEK && posTotalMs > 0) {
@@ -1027,12 +1036,20 @@ static LRESULT CALLBACK PlayerWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             MCI_SetPos(posCurMs);
             if (isPlaying || isPaused) {
                 mciSendStringA("play myAudio notify", nullptr, 0, hPlayerWnd);
-                isPlaying = true; isPaused = false;
+                if (isPaused) {
+                    // Stay paused at new position
+                    mciSendStringA("pause myAudio", nullptr, 0, nullptr);
+                } else {
+                    isPlaying = true;
+                }
             }
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
         }
         if (volDragging) {
             volDragging = false;
             ReleaseCapture();
+            return 0;
         }
         return 0;
 
@@ -1043,6 +1060,14 @@ static LRESULT CALLBACK PlayerWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
         if (PtInR(rcListArea, pt.x, pt.y)) {
             listScrollY -= delta / 40;
             if (listScrollY < 0) listScrollY = 0;
+            {
+                std::lock_guard<std::mutex> lk(listMtx);
+                int itemH = 28;
+                int headerH = 24;
+                int visible = (rcListArea.bottom - rcListArea.top - headerH) / itemH;
+                int maxScroll = max(0, (int)recList.size() - visible);
+                if (listScrollY > maxScroll) listScrollY = maxScroll;
+            }
             InvalidateRect(hWnd, nullptr, FALSE);
         }
         return 0;
@@ -1054,13 +1079,16 @@ static LRESULT CALLBACK PlayerWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             // Trigger search
             char buf[256] = {};
             GetWindowTextA(hSearchEdit, buf, 256);
-            searchQuery = buf;
-            if (searchQuery.empty()) return 0;
+            std::string query = buf;
+            if (query.empty()) return 0;
+            {
+                std::lock_guard<std::mutex> lk(searchMtx);
+                searchQuery = query;
+            }
             searchStatus = "Searching...";
             InvalidateRect(hWnd, nullptr, FALSE);
-            std::thread([hWnd]() {
-                std::string q = searchQuery;
-                std::string result = FindRecordingByMetadata(q);
+            std::thread([hWnd, query]() {
+                std::string result = FindRecordingByMetadata(query);
                 PostMessage(hWnd, WM_USER + 1, 0, (LPARAM)new std::string(result));
             }).detach();
         }
@@ -1098,6 +1126,19 @@ static LRESULT CALLBACK PlayerWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
         if (wParam == VK_SPACE) {
             if (isPlaying) MCI_Pause();
             else if (isPaused) MCI_Resume();
+            else if (!currentAudioPath.empty()) MCI_Play(currentAudioPath);
+            else {
+                // Play first in list (same as Play button)
+                std::string p;
+                {
+                    std::lock_guard<std::mutex> lk(listMtx);
+                    if (!recList.empty()) {
+                        listSelIdx = 0;
+                        p = recList[0].path;
+                    }
+                }
+                if (!p.empty()) PlayFile(p);
+            }
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
         }
@@ -1107,8 +1148,21 @@ static LRESULT CALLBACK PlayerWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
 
     case WM_CLOSE:
         MCI_Stop();
+        KillTimer(hWnd, IDC_TIMER_POS);
         ShowWindow(hWnd, SW_HIDE);
         return 0;
+
+    case WM_DESTROY: {
+        KillTimer(hWnd, IDC_TIMER_POS);
+        MCI_Stop();
+        if (fTitle)  { DeleteObject(fTitle);  fTitle  = nullptr; }
+        if (fNormal) { DeleteObject(fNormal); fNormal = nullptr; }
+        if (fSmall)  { DeleteObject(fSmall);  fSmall  = nullptr; }
+        if (fMono)   { DeleteObject(fMono);   fMono   = nullptr; }
+        hSearchEdit = nullptr;
+        hPlayerWnd  = nullptr;
+        return 0;
+    }
 
     case WM_GETMINMAXINFO: {
         MINMAXINFO* mm = (MINMAXINFO*)lParam;
@@ -1165,6 +1219,7 @@ void ShowPlayerWindow() {
     }
     if (hPlayerWnd) {
         ShowWindow(hPlayerWnd, SW_SHOW);
+        SetTimer(hPlayerWnd, IDC_TIMER_POS, 80, nullptr);
         SetForegroundWindow(hPlayerWnd);
         // Refresh list
         std::thread([]() {
