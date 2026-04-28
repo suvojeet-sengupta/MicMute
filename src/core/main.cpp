@@ -76,7 +76,7 @@ bool isPressedClose = false;
 bool isPressedMin = false;
 
 // General Tab Controls
-HWND hStartupCheck, hOverlayCheck, hMeterCheck, hRecorderCheck, hNotifyCheck, hBeepCheck;
+HWND hStartupCheck, hNotifyCheck, hBeepCheck;
 HWND hDevModeCheck, hGoToDevButtons;
 
 // Hide/Unhide Tab Controls
@@ -87,7 +87,7 @@ HWND hHideMuteBtn, hHideVoiceMeter, hHideRecStatus, hHideCallStats;
 HWND hSizeCompact, hSizeNormal, hSizeWide;
 
 // Tab Labels
-constexpr std::array<const char*, 4> tabNames = { "General", "Hide/Unhide", "Shape & Size", "Appearance" };
+constexpr std::array<const char*, 4> tabNames = { "General", "Hide/Unhide", "Shape & Size", "About" };
 constexpr int TAB_COUNT = 4;
 
 // Helper: Update layout of controls based on tab and scroll
@@ -463,9 +463,42 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 WS_CHILD | BS_PUSHBUTTON,
                 contentX + 280, startY, 120, 36, hWnd, (HMENU)ID_SIZE_WIDE, hInst, nullptr);
 
-            // Footer
-            CreateWindow("STATIC", "by Suvojeet Sengupta", 
+            // Footer (version + author)
+            std::string footerText = std::string(APP_VERSION) + "  -  by Suvojeet Sengupta";
+            CreateWindow("STATIC", footerText.c_str(),
                  WS_VISIBLE | WS_CHILD | SS_RIGHT, 0, 0, 0, 0, hWnd, (HMENU)9999, hInst, nullptr);
+
+            // Tooltip control: provides hover hints for every interactive control.
+            HWND hTooltip = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, nullptr,
+                WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
+                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                hWnd, nullptr, hInst, nullptr);
+            if (hTooltip) {
+                auto AddTip = [&](HWND hCtl, const char* text) {
+                    if (!hCtl || !text) return;
+                    TOOLINFO ti = {0};
+                    ti.cbSize = sizeof(TOOLINFO);
+                    ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+                    ti.hwnd = hWnd;
+                    ti.uId = (UINT_PTR)hCtl;
+                    ti.lpszText = (LPSTR)text;
+                    SendMessage(hTooltip, TTM_ADDTOOL, 0, (LPARAM)&ti);
+                };
+                SendMessage(hTooltip, TTM_SETMAXTIPWIDTH, 0, 360);
+                AddTip(hStartupCheck, "Launch MicMute-S automatically when Windows starts.");
+                AddTip(hNotifyCheck, "Show a desktop notification each time the microphone state changes.");
+                AddTip(hBeepCheck, "Play a short beep when an active call is detected by the browser extension.");
+                AddTip(hDevModeCheck, "Unlock advanced options. Requires the app password.");
+                AddTip(hGoToDevButtons, "Open the Developer Options window (recording folder, retention, manual recording).");
+                AddTip(hHideMuteBtn, "Show or hide the large mute/unmute button on the floating control panel.");
+                AddTip(hHideVoiceMeter, "Show or hide the live voice-level meter on the floating control panel.");
+                AddTip(hHideRecStatus, "Show or hide the manual recorder controls. Requires password to enable.");
+                AddTip(hHideCallStats, "Show or hide today's recorded-call counter on the panel.");
+                AddTip(hSizeCompact, "Smallest layout. Best for dense desktops.");
+                AddTip(hSizeNormal, "Recommended balanced layout.");
+                AddTip(hSizeWide, "Larger layout. Useful on high-DPI displays.");
+                AddTip(GetDlgItem(hWnd, ID_CHECK_UPDATE), "Check GitHub for the latest release.");
+            }
 
             UpdateLayout(hWnd);
             break;
@@ -491,7 +524,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             HWND hFooter = GetDlgItem(hWnd, 9999);
             if (hFooter) {
-                MoveWindow(hFooter, rc.right - 160, rc.bottom - 40, 140, 20, TRUE);
+                MoveWindow(hFooter, rc.right - 280, rc.bottom - 32, 260, 20, TRUE);
             }
             InvalidateRect(hWnd, nullptr, TRUE);
             break;
@@ -610,12 +643,73 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 DrawText(hdc, statusText, -1, &rcStatus, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
             }
 
-            // Content for placeholder tabs (Appearance)
+            // About tab content
             if (currentTab == 3) {
-                SetTextColor(hdc, colorTextDim);
+                int contentX = SIDEBAR_WIDTH + 40;
+                int y = 90 - scrollY;
+
+                // Heading
+                SetTextColor(hdc, colorText);
                 SelectObject(hdc, hFontTitle);
-                RECT rcContent = {SIDEBAR_WIDTH, 150 - scrollY, rcClient.right, 250 - scrollY};
-                DrawText(hdc, "Coming Soon", -1, &rcContent, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+                RECT rcAbout1 = {contentX, y, rcClient.right - 40, y + 38};
+                DrawText(hdc, "MicMute-S", -1, &rcAbout1, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
+                y += 44;
+
+                // Tagline
+                SetTextColor(hdc, colorTextDim);
+                SelectObject(hdc, hFontSmall);
+                RECT rcAbout2 = {contentX, y, rcClient.right - 40, y + 22};
+                DrawText(hdc, "Professional-grade microphone control for Windows.", -1, &rcAbout2, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
+                y += 36;
+
+                // Version row
+                SetTextColor(hdc, colorAccent);
+                SelectObject(hdc, hFontNormal);
+                std::string verLine = std::string("Version: ") + APP_VERSION;
+                RECT rcVer = {contentX, y, rcClient.right - 40, y + 26};
+                DrawText(hdc, verLine.c_str(), -1, &rcVer, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
+                y += 32;
+
+                // Author
+                SetTextColor(hdc, colorText);
+                SelectObject(hdc, hFontSmall);
+                RECT rcAuthor = {contentX, y, rcClient.right - 40, y + 22};
+                DrawText(hdc, "Developed by Suvojeet Sengupta", -1, &rcAuthor, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
+                y += 30;
+
+                SetTextColor(hdc, colorTextDim);
+                RECT rcRepo = {contentX, y, rcClient.right - 40, y + 22};
+                DrawText(hdc, "github.com/suvojeet-sengupta/MicMute", -1, &rcRepo, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
+                y += 36;
+
+                // Separator
+                HPEN sepPen = CreatePen(PS_SOLID, 1, colorPanelBorder);
+                HPEN oldPen = (HPEN)SelectObject(hdc, sepPen);
+                MoveToEx(hdc, contentX, y, nullptr);
+                LineTo(hdc, rcClient.right - 40, y);
+                SelectObject(hdc, oldPen);
+                DeleteObject(sepPen);
+                y += 16;
+
+                // Hotkey hint
+                SetTextColor(hdc, colorText);
+                SelectObject(hdc, hFontSmall);
+                RECT rcHk1 = {contentX, y, rcClient.right - 40, y + 22};
+                DrawText(hdc, "Quick Tips", -1, &rcHk1, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
+                y += 26;
+
+                SetTextColor(hdc, colorTextDim);
+                const char* tips[] = {
+                    "* Click the tray icon to toggle mute instantly.",
+                    "* Right-click the tray icon for the menu.",
+                    "* Closing the window keeps MicMute running in the tray.",
+                    "* Use 'Check for Updates' on the General tab to upgrade."
+                };
+                for (const char* t : tips) {
+                    RECT rcT = {contentX, y, rcClient.right - 40, y + 22};
+                    DrawText(hdc, t, -1, &rcT, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
+                    y += 24;
+                }
             }
 
             // Content heading for Hide/Unhide tab
@@ -844,50 +938,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 ManageStartup(isRunOnStartup);
                 InvalidateRect(hStartupCheck, nullptr, FALSE);
             }
-            else if (wmId == ID_SHOW_OVERLAY) {
-                // Remapped to: Show Mute Button in Panel
-                showMuteBtn = !showMuteBtn;
-                SaveSettings();
-                UpdateControlPanel();
-                InvalidateRect(hOverlayCheck, nullptr, FALSE);
-            }
-            else if (wmId == ID_SHOW_METER) {
-                // Remapped to: Show Voice Meter in Panel
-                showVoiceMeter = !showVoiceMeter;
-                SaveSettings();
-                UpdateControlPanel();
-                InvalidateRect(hMeterCheck, nullptr, FALSE);
-            }
-            else if (wmId == ID_SHOW_RECORDER) {
-                // Remapped to: Show Recorder Status + Manual Rec in Panel
-                // Check if enabling
-                if (!showRecStatus) {
-                    const char* manualDisclaimer = 
-                        "Manual Recording captures both system audio and microphone input.\n\n"
-                        "By enabling this, you are responsible for notifying all parties if required by law. "
-                        "Unauthorized recording may violate privacy laws.";
-                    
-                    if (!ShowDisclaimerDialog(hWnd, manualDisclaimer)) {
-                        return 0; // Declined
-                    }
-                }
-
-                // Password Protection
-                if (!PromptForPassword(hWnd)) {
-                    return 0; 
-                }
-
-                bool newState = !showRecStatus; 
-                showRecStatus = newState;
-                showManualRec = newState;
-                
-                // Update agreement flag
-                hasAgreedToManualDisclaimer = showRecStatus;
-
-                SaveSettings();
-                UpdateControlPanel();
-                InvalidateRect(hRecorderCheck, nullptr, FALSE);
-            }
             else if (wmId == ID_SHOW_NOTIFICATIONS) {
                 showNotifications = !showNotifications;
                 UpdateControlPanel();
@@ -933,9 +983,34 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 InvalidateRect(hHideVoiceMeter, nullptr, FALSE);
             }
             else if (wmId == ID_HIDE_REC_STATUS) {
+                // Enabling Recording Status implies showing the manual recorder UI,
+                // which captures system audio + mic. Require disclaimer + password
+                // (skip password if developer mode is already unlocked this session).
+                if (!showRecStatus) {
+                    if (!hasAgreedToManualDisclaimer) {
+                        const char* manualDisclaimer =
+                            "Manual Recording captures both system audio and microphone input.\n\n"
+                            "By enabling this, you are responsible for notifying all parties if required by law. "
+                            "Unauthorized recording may violate privacy laws.";
+                        if (!ShowDisclaimerDialog(hWnd, manualDisclaimer)) {
+                            // Bounce the checkbox back to unchecked
+                            SendMessage(hHideRecStatus, BM_SETCHECK, BST_UNCHECKED, 0);
+                            InvalidateRect(hHideRecStatus, nullptr, FALSE);
+                            return 0;
+                        }
+                        hasAgreedToManualDisclaimer = true;
+                    }
+                    if (!isDevModeEnabled && !PromptForPassword(hWnd)) {
+                        SendMessage(hHideRecStatus, BM_SETCHECK, BST_UNCHECKED, 0);
+                        InvalidateRect(hHideRecStatus, nullptr, FALSE);
+                        return 0;
+                    }
+                }
                 showRecStatus = !showRecStatus;
+                showManualRec = showRecStatus;
                 SaveSettings();
                 UpdateControlPanel();
+                SendMessage(hHideRecStatus, BM_SETCHECK, showRecStatus ? BST_CHECKED : BST_UNCHECKED, 0);
                 InvalidateRect(hHideRecStatus, nullptr, FALSE);
             }
             else if (wmId == ID_HIDE_CALL_STATS) {

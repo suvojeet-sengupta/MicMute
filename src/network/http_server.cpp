@@ -98,34 +98,50 @@ void SendResponse(SOCKET client, int statusCode, const char* statusText, const c
 void HandleRequest(SOCKET client) {
     char buffer[BUFFER_SIZE];
     int bytesReceived = recv(client, buffer, BUFFER_SIZE - 1, 0);
-    
+
     if (bytesReceived <= 0) {
         closesocket(client);
         return;
     }
-    
+
+    // Guard against malicious/malformed lengths just in case
+    if (bytesReceived >= (int)BUFFER_SIZE) bytesReceived = (int)BUFFER_SIZE - 1;
     buffer[bytesReceived] = '\0';
-    
+
     // Parse HTTP method and path
     char method[16], path[256];
     if (sscanf_s(buffer, "%15s %255s", method, (unsigned)_countof(method), path, (unsigned)_countof(path)) != 2) {
+        SendResponse(client, 400, "Bad Request", "{\"error\":\"malformed request\"}");
         closesocket(client);
         return;
     }
-    
+
     // Handle CORS preflight
     if (strcmp(method, "OPTIONS") == 0) {
         SendResponse(client, 200, "OK", "{}");
         closesocket(client);
         return;
-        return;
     }
-    
-    std::string bodyStr = "";
-    // Find body (after double \r\n)
+
+    // Find body (after double \r\n) and bound it by Content-Length when present
+    std::string bodyStr;
     char* bodyStart = strstr(buffer, "\r\n\r\n");
     if (bodyStart) {
-        bodyStr = std::string(bodyStart + 4);
+        char* bodyData = bodyStart + 4;
+        int bodyAvail = bytesReceived - (int)(bodyData - buffer);
+        if (bodyAvail < 0) bodyAvail = 0;
+
+        int bodyLen = bodyAvail;
+        // Honor Content-Length if smaller than what we have buffered
+        const char* clHdr = strstr(buffer, "Content-Length:");
+        if (!clHdr) clHdr = strstr(buffer, "content-length:");
+        if (clHdr && clHdr < bodyStart) {
+            int declared = 0;
+            if (sscanf_s(clHdr + 15, " %d", &declared) == 1 && declared >= 0 && declared < bodyAvail) {
+                bodyLen = declared;
+            }
+        }
+        bodyStr.assign(bodyData, bodyLen);
     }
     
     // Handle POST requests

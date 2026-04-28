@@ -16,7 +16,7 @@ namespace AutoUpdater {
 
     static HWND hParent = nullptr;
     static std::atomic<UpdateStatus> currentStatus = UpdateStatus::None;
-    static bool isCheckSilent = false;
+    static std::atomic<bool> isCheckSilent{false};
     
     // Simple JSON Value parser (minimal for extraction)
     // We only need tag_name, body, assets array
@@ -50,20 +50,20 @@ namespace AutoUpdater {
             std::wstring path = L"/repos/suvojeet-sengupta/MicMute/releases/latest";
             
             std::string json = MakeHttpRequest(domain, path);
-            
+
             if (json.empty()) {
                 currentStatus = UpdateStatus::Error;
-                if (!isCheckSilent) {
+                if (!isCheckSilent.load()) {
                     MessageBox(hParent, "Failed to check for updates. Please check your internet connection.", "Update Check", MB_ICONERROR);
                 }
                 return;
             }
-            
+
             ReleaseInfo info = ParseGitHubRelease(json);
-            
+
             if (!info.valid) {
                  currentStatus = UpdateStatus::Error;
-                 if (!isCheckSilent) {
+                 if (!isCheckSilent.load()) {
                      MessageBox(hParent, "Could not parse update information.", "Update Check", MB_ICONERROR);
                  }
                  return;
@@ -102,8 +102,10 @@ namespace AutoUpdater {
                 }
             } else {
                 currentStatus = UpdateStatus::UpToDate;
-                if (!isCheckSilent) {
-                    MessageBox(hParent, "You are using the latest version.", "Update Check", MB_ICONINFORMATION);
+                if (!isCheckSilent.load()) {
+                    std::string okMsg = "You are using the latest version.\n\nInstalled: ";
+                    okMsg += APP_VERSION;
+                    MessageBox(hParent, okMsg.c_str(), "Update Check", MB_ICONINFORMATION);
                 }
             }
             
@@ -234,13 +236,15 @@ namespace AutoUpdater {
         
         int a1=0, b1=0, c1=0;
         int a2=0, b2=0, c2=0;
-        sscanf_s(v1.c_str(), "%d.%d.%d", &a1, &b1, &c1);
-        sscanf_s(v2.c_str(), "%d.%d.%d", &a2, &b2, &c2);
-        
+        // Require at least major.minor; treat patch as 0 when absent.
+        int parsed1 = sscanf_s(v1.c_str(), "%d.%d.%d", &a1, &b1, &c1);
+        int parsed2 = sscanf_s(v2.c_str(), "%d.%d.%d", &a2, &b2, &c2);
+        if (parsed1 < 2 || parsed2 < 2) return false; // Refuse to upgrade on unparseable versions
+
         if (a2 > a1) return true;
         if (a2 == a1 && b2 > b1) return true;
         if (a2 == a1 && b2 == b1 && c2 > c1) return true;
-        
+
         return false;
     }
 
@@ -329,41 +333,47 @@ namespace AutoUpdater {
         std::string currentDir = std::filesystem::path(exePath).parent_path().string();
         
         if (DownloadFile(downloadUrl, updateFile)) {
+            // Reject any path containing a literal double-quote — would break our quoting.
+            auto hasUnsafeQuote = [](const std::string& s) { return s.find('"') != std::string::npos; };
+            if (hasUnsafeQuote(updateFile) || hasUnsafeQuote(currentExe) || hasUnsafeQuote(currentDir)) {
+                MessageBox(hParent, "Update aborted: install path contains unsafe characters.", "Update Error", MB_ICONERROR);
+                return;
+            }
+
             if (isInstaller) {
                 // Create a batch script that waits for installer to finish, then restarts MicMute
                 std::string batPath = std::string(tempPath) + "micmute_update_restart.bat";
                 std::ofstream bat(batPath);
                 bat << "@echo off\n";
                 bat << "echo Updating MicMute-S...\n";
-                // Run installer silently and wait for it to finish
                 bat << "\"" << updateFile << "\" /SILENT /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS\n";
-                // Wait a moment for the installer to fully complete
                 bat << "timeout /t 3 /nobreak > NUL\n";
-                // Restart MicMute from its install location
                 bat << "start \"\" \"" << currentExe << "\"\n";
-                bat << "del \"%~f0\" & exit\n";
+                bat << "del \"" << updateFile << "\" 2> NUL\n";
+                bat << "(goto) 2>nul & del \"%~f0\"\n";
                 bat.close();
-                
+
                 ShellExecute(NULL, "open", batPath.c_str(), NULL, NULL, SW_HIDE);
                 PostQuitMessage(0);
             } else {
                 // Portable update logic
                 std::string batPath = currentDir + "\\update.bat";
                 std::ofstream bat(batPath);
-                
+
                 bat << "@echo off\n";
                 bat << "timeout /t 2 /nobreak > NUL\n"; // Wait for app close
-                bat << "powershell -command \"Expand-Archive -Path '" << updateFile << "' -DestinationPath '" << currentDir << "' -Force\"\n";
-                bat << "start \"\" \"" << exePath << "\"\n";
-                bat << "del \"%~f0\" & exit\n";
+                bat << "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Expand-Archive -Path '"
+                    << updateFile << "' -DestinationPath '" << currentDir << "' -Force\"\n";
+                bat << "start \"\" \"" << currentExe << "\"\n";
+                bat << "del \"" << updateFile << "\" 2> NUL\n";
+                bat << "(goto) 2>nul & del \"%~f0\"\n";
                 bat.close();
-                
-                // Run batch and exit
+
                 ShellExecute(NULL, "open", batPath.c_str(), NULL, NULL, SW_HIDE);
                 PostQuitMessage(0);
             }
         } else {
-            MessageBox(hParent, "Download failed.", "Update Error", MB_ICONERROR);
+            MessageBox(hParent, "Download failed. Please check your network connection or try again later.", "Update Error", MB_ICONERROR);
         }
     }
 

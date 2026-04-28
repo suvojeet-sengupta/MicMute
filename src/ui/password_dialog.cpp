@@ -189,8 +189,8 @@ static LRESULT CALLBACK PasswordDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
             HDC hdcEdit = (HDC)wParam;
             SetTextColor(hdcEdit, kTextPrimary);
             SetBkColor(hdcEdit, kFieldBg);
-            if (hEditBrush) DeleteObject(hEditBrush);
-            hEditBrush = CreateSolidBrush(kFieldBg);
+            // Lazy-init the brush; do NOT recreate it on every paint (was leaking GDI handles).
+            if (!hEditBrush) hEditBrush = CreateSolidBrush(kFieldBg);
             return (LRESULT)hEditBrush;
         }
 
@@ -291,15 +291,21 @@ bool PromptForPassword(HWND hParent) {
     hoverOK = false;
     hoverCancel = false;
 
-    // Register class
-    WNDCLASSEX wc = {0};
-    wc.cbSize = sizeof(WNDCLASSEX);
-    wc.lpfnWndProc = PasswordDlgProc;
-    wc.hInstance = GetModuleHandle(nullptr);
-    wc.hbrBackground = CreateSolidBrush(kDlgBg);
-    wc.lpszClassName = "MicMuteS_PasswordDlg";
-    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    RegisterClassEx(&wc);
+    // Register class only once for the process. Repeated RegisterClassEx leaks
+    // the background brush and eventually exhausts atom slots.
+    static bool s_classRegistered = false;
+    static HBRUSH s_classBrush = nullptr;
+    if (!s_classRegistered) {
+        s_classBrush = CreateSolidBrush(kDlgBg);
+        WNDCLASSEX wc = {0};
+        wc.cbSize = sizeof(WNDCLASSEX);
+        wc.lpfnWndProc = PasswordDlgProc;
+        wc.hInstance = GetModuleHandle(nullptr);
+        wc.hbrBackground = s_classBrush;
+        wc.lpszClassName = "MicMuteS_PasswordDlg";
+        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        if (RegisterClassEx(&wc)) s_classRegistered = true;
+    }
 
     // Center on parent
     RECT rcParent;
