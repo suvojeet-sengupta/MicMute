@@ -162,60 +162,53 @@ CallAutoRecorder::~CallAutoRecorder() {
 }
 
 void CallAutoRecorder::Enable() {
-    if (enabled) return;
-    
-    // Reset date tracking
+    std::lock_guard<std::recursive_mutex> lk(stateMutex);
+    if (enabled.load()) return;
+
     currentDate = GetCurrentDateString();
-    
-    // Cleanup old recordings if enabled
     CleanupOldRecordings();
-    
-    // Scan existing recordings for today
+
     std::string folder = GetCurrentDateFolder();
     todayCallCount = CountRecordings(folder);
-    
-    enabled = true;
-    currentState = State::DETECTING;
+
+    enabled.store(true);
+    currentState.store(State::DETECTING);
     lastVoiceTime = 0;
 }
 
 void CallAutoRecorder::Disable() {
-    if (!enabled) return;
-    
-    // If currently recording, stop and save
-    if (currentState == State::RECORDING && pRecorder && pRecorder->IsRecording()) {
+    std::lock_guard<std::recursive_mutex> lk(stateMutex);
+    if (!enabled.load()) return;
+
+    if (currentState.load() == State::RECORDING && pRecorder && pRecorder->IsRecording()) {
         OnSilenceTimeout();
     }
-    
-    enabled = false;
-    currentState = State::IDLE;
+
+    enabled.store(false);
+    currentState.store(State::IDLE);
 }
 
 void CallAutoRecorder::TransitionTo(State newState) {
-    currentState = newState;
-    
+    currentState.store(newState);
+
     // Beep is now handled in http_server.cpp (independent of recording)
 }
 
 void CallAutoRecorder::Poll() {
-    if (!enabled) return;
-    
+    if (!enabled.load()) return;
+
     // Check if date changed (new day)
     std::string today = GetCurrentDateString();
     if (today != currentDate) {
         currentDate = today;
-        // Date changed, reset count by scanning new folder (likely 0, but good to be safe)
         std::string folder = GetCurrentDateFolder();
         todayCallCount = CountRecordings(folder);
     }
 
-    // Safety: If extension disconnects (tab closed) while recording, save immediately
-    if (currentState == State::RECORDING && !IsExtensionConnected()) {
+    // Safety: if the extension disconnects (tab closed) while recording, save immediately
+    if (currentState.load() == State::RECORDING && !IsExtensionConnected()) {
         ForceStopRecording();
     }
-    
-    // No VAD - recording is controlled by HTTP server (extension signals)
-    // Poll() is now only for date tracking and UI updates
 }
 
 void CallAutoRecorder::OnVoiceDetected() {
@@ -251,42 +244,47 @@ void CallAutoRecorder::OnSilenceTimeout() {
     TransitionTo(State::DETECTING);
 }
 
-// Force start recording from external trigger (HTTP server)
+// Force start recording from external trigger (HTTP server).
+// Critical: when a /start arrives while already recording (back-to-back calls
+// where the previous /stop was missed or delayed), we MUST finalize the previous
+// recording first, otherwise both calls get merged into a single file with the
+// metadata of just one call.
 void CallAutoRecorder::ForceStartRecording(const std::map<std::string, std::string>& metadata) {
+    std::lock_guard<std::recursive_mutex> lk(stateMutex);
     if (!pRecorder) return;
-    
-    // IMPORTANT: Respect the user's "Auto Record" toggle.
-    // The HTTP server handles the "Beep" independently.
-    // Here we only proceed if recording is actually enabled.
-    if (!enabled) return; 
+    if (!enabled.load()) return;
 
-    // If already recording, do nothing
-    if (currentState == State::RECORDING) return;
+    // If a previous recording is still in flight, finalize it first so we don't
+    // bleed the next call into the same WAV file.
+    if (currentState.load() == State::RECORDING) {
+        TransitionTo(State::SAVING);
+        pRecorder->Stop();
+        ULONGLONG prevDuration = GetTickCount64() - recordingStartTick;
+        if (prevDuration >= (DWORD)minCallDurationMs) {
+            SaveCurrentRecording();
+        } else {
+            pRecorder->FinalizeStreaming("discarded.wav");
+        }
+        currentCallMetadata.clear();
+        TransitionTo(State::DETECTING);
+    }
 
-    // Store initial metadata
+    // Fresh metadata for the new call
     currentCallMetadata = metadata;
 
-    // Enforce Folder Selection (Must be on UI thread really, but let's try direct call or use main window)
-    // Since this might be called from HTTP thread, we need to be careful. 
-    // However, MessageBox is generally thread-safe if parent is NULL or valid window.
-    // Ideally we should PostMessage to main thread, but for now strict enforcement:
+    // Recording folder must be selected. If called from the HTTP thread, the
+    // BrowseFolder dialog opens on the main window and the HTTP thread blocks
+    // until the user picks one — acceptable trade-off given Ozonetel will
+    // immediately retry if we drop the call.
     if (recordingFolder.empty()) {
-        // We need updates to run on UI thread to be safe with COM (BrowseFolder)
-        // But for satisfied requirement "select hone ke bd hi on hoga", we can block here or fail.
-        // Prompting from a hidden background thread is bad UX (might hide behind windows).
-        // Better to fail internally if not set, BUT user asked for PROMPT.
-        
-        // Let's use the main window handle if available
         if (!EnsureRecordingFolderSelected(hMainWnd)) {
-            return; // Cancelled or failed
+            return; // User cancelled
         }
     }
-    
-    // Create date folder for streaming
+
     std::string dateFolder = CreateDateFolder();
     if (dateFolder.empty()) return;
-    
-    // Start streaming mode for memory safety
+
     if (pRecorder->StartStreaming(dateFolder)) {
         recordingStartTick = GetTickCount64();
         recordingStartTime = std::time(nullptr);
@@ -297,36 +295,32 @@ void CallAutoRecorder::ForceStartRecording(const std::map<std::string, std::stri
 
 // Force stop recording from external trigger (HTTP server)
 void CallAutoRecorder::ForceStopRecording(const std::map<std::string, std::string>& metadata) {
+    std::lock_guard<std::recursive_mutex> lk(stateMutex);
     if (!pRecorder) return;
-    
-    // If not recording, do nothing
-    if (currentState != State::RECORDING) return;
-    
-    // Update/Merge metadata (extension sends fresh full data on stop)
+
+    // If no recording is in progress (already saved by a back-to-back /start, or
+    // never started), just merge the metadata for diagnostics and return.
+    if (currentState.load() != State::RECORDING) {
+        return;
+    }
+
     if (!metadata.empty()) {
         for (const auto& kv : metadata) {
             currentCallMetadata[kv.first] = kv.second;
         }
     }
-    
+
     TransitionTo(State::SAVING);
-    
-    // Stop recording
     pRecorder->Stop();
-    
-    // Save if long enough
+
     ULONGLONG duration = GetTickCount64() - recordingStartTick;
     if (duration >= (DWORD)minCallDurationMs) {
         SaveCurrentRecording();
     } else {
-        // Too short - just cleanup (FinalizeStreaming will still save temp file)
         pRecorder->FinalizeStreaming("discarded.wav");
     }
-    
-    // Clear metadata
+
     currentCallMetadata.clear();
-    
-    // Ready for next call (waiting for extension signal)
     TransitionTo(State::DETECTING);
 }
 

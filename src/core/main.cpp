@@ -1042,6 +1042,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
             }
+            else if (wmId == ID_TRAY_TOGGLE_MUTE) {
+                ToggleMute();
+            }
+            else if (wmId == ID_TRAY_TOGGLE_PANEL) {
+                if (IsControlPanelShown()) HideControlPanel();
+                else ShowControlPanel();
+            }
             else if (wmId == ID_CHECK_UPDATE) {
                 AutoUpdater::CheckForUpdateAsync(false); // Not silent = show dialogs
             }
@@ -1066,6 +1073,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             } else if (lParam == WM_RBUTTONUP) {
                 POINT pt; GetCursorPos(&pt);
                 HMENU hMenu = CreatePopupMenu();
+                bool muted = IsDefaultMicMuted();
+                bool panelShown = IsControlPanelShown();
+                AppendMenu(hMenu, MF_STRING, ID_TRAY_TOGGLE_MUTE, muted ? "Unmute Microphone" : "Mute Microphone");
+                AppendMenu(hMenu, MF_SEPARATOR, 0, nullptr);
+                AppendMenu(hMenu, MF_STRING, ID_TRAY_TOGGLE_PANEL, panelShown ? "Hide Control Panel" : "Show Control Panel");
                 AppendMenu(hMenu, MF_STRING, ID_TRAY_OPEN, "Open Settings");
                 AppendMenu(hMenu, MF_SEPARATOR, 0, nullptr);
                 AppendMenu(hMenu, MF_STRING, ID_TRAY_EXIT, "Exit");
@@ -1107,6 +1119,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             } else if (wParam == 2) {
                 if (skipTimerCycles > 0) { skipTimerCycles--; break; }
                 UpdateUIState();
+                // Re-scan audio endpoints every 2 s so the speaker/customer meter
+                // tracks the current default render device when the user switches
+                // outputs (Bluetooth headset connect, monitor swap, etc.).
+                RefreshAudioDevices();
             }
             break;
 

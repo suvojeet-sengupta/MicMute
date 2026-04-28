@@ -28,6 +28,14 @@
 #define CPANEL_BTN_SETTINGS   3004
 #define CPANEL_BTN_PLAYER     3005
 
+// Right-click context menu IDs (panel-local, do not collide with main IDs)
+#define CPMENU_TOGGLE_MUTE    3101
+#define CPMENU_MINI_TOGGLE    3102
+#define CPMENU_OPEN_SETTINGS  3103
+#define CPMENU_HIDE_PANEL     3104
+#define CPMENU_RESET_POS      3105
+#define CPMENU_EXIT           3106
+
 // Animation state
 static int cpAnimFrame = 0;
 static bool cpDragging = false;
@@ -191,8 +199,48 @@ void SaveControlPanelPosition() {
     if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\MicMute-S", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
         RegSetValueEx(hKey, "PanelX", 0, REG_DWORD, (BYTE*)&rect.left, sizeof(DWORD));
         RegSetValueEx(hKey, "PanelY", 0, REG_DWORD, (BYTE*)&rect.top, sizeof(DWORD));
+        DWORD visible = IsWindowVisible(hControlPanel) ? 1 : 0;
+        RegSetValueEx(hKey, "PanelVisible", 0, REG_DWORD, (BYTE*)&visible, sizeof(DWORD));
         RegCloseKey(hKey);
     }
+}
+
+static bool LoadPanelVisiblePref() {
+    DWORD visible = 1; // default: visible
+    HKEY hKey;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\MicMute-S", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        DWORD size = sizeof(DWORD);
+        RegQueryValueEx(hKey, "PanelVisible", nullptr, nullptr, (BYTE*)&visible, &size);
+        RegCloseKey(hKey);
+    }
+    return visible != 0;
+}
+
+static void SavePanelVisiblePref(bool visible) {
+    HKEY hKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\MicMute-S", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+        DWORD v = visible ? 1 : 0;
+        RegSetValueEx(hKey, "PanelVisible", 0, REG_DWORD, (BYTE*)&v, sizeof(DWORD));
+        RegCloseKey(hKey);
+    }
+}
+
+void ShowControlPanel() {
+    if (!hControlPanel) return;
+    ShowWindow(hControlPanel, SW_SHOWNA);
+    SetWindowPos(hControlPanel, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    UpdateWindow(hControlPanel);
+    SavePanelVisiblePref(true);
+}
+
+void HideControlPanel() {
+    if (!hControlPanel) return;
+    ShowWindow(hControlPanel, SW_HIDE);
+    SavePanelVisiblePref(false);
+}
+
+bool IsControlPanelShown() {
+    return hControlPanel && IsWindowVisible(hControlPanel);
 }
 
 void LoadControlPanelPosition(int* x, int* y, int* w, int* h) {
@@ -384,8 +432,10 @@ void CreateControlPanel(HINSTANCE hInstance) {
             }
         }
 
-        ShowWindow(hControlPanel, SW_SHOW);
-        UpdateWindow(hControlPanel);
+        if (LoadPanelVisiblePref()) {
+            ShowWindow(hControlPanel, SW_SHOW);
+            UpdateWindow(hControlPanel);
+        }
     }
 }
 
@@ -436,7 +486,21 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             FillRect(mem, &rect, bgBr);
             DeleteObject(bgBr);
 
-            // Border
+            int margin = 8;
+            int drawX = margin;
+            int panelH = rect.bottom;
+            bool isMuted = IsDefaultMicMuted();
+
+            // Top status accent strip — colored by current mute state.
+            // Gives the panel a unique signature and lets users read the mic
+            // state from across the room even when the panel is in mini mode.
+            COLORREF accent = isMuted ? RGB(255, 80, 80) : RGB(60, 220, 120);
+            HBRUSH accentBr = CreateSolidBrush(accent);
+            RECT accentStrip = {6, 0, rect.right - 6, 2};
+            FillRect(mem, &accentStrip, accentBr);
+            DeleteObject(accentBr);
+
+            // Border (rounded)
             HPEN borderPen = CreatePen(PS_SOLID, 1, colorPanelBorder);
             SelectObject(mem, borderPen);
             SelectObject(mem, GetStockObject(NULL_BRUSH));
@@ -444,11 +508,6 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             DeleteObject(borderPen);
 
             SetBkMode(mem, TRANSPARENT);
-
-            int margin = 8;
-            int drawX = margin;
-            int panelH = rect.bottom;
-            bool isMuted = IsDefaultMicMuted();
 
             // === Section 1: Mute Button ===
             if (showMuteBtn || cpMiniMode) { // Always show in mini mode (if enabled? assume yes or fallback)
@@ -506,6 +565,10 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             }
 
             // === Section 2: Voice Meter ===
+            // Top half  = MIC   (advisor's microphone)
+            // Bottom half = SPK (customer's voice over speaker / loopback)
+            // When the auto-call recorder is enabled we relabel them so call-centre
+            // operators can read the panel at a glance.
             if (showVoiceMeter) {
                 int meterW = 120;
                 int halfH = (panelH - 4) / 2;
@@ -518,13 +581,17 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 DrawMiniWaveform(mem, spkArea, speakerLevelHistory.data(), levelHistoryIndex, false,
                                   RGB(0, 200, 255), RGB(0, 100, 255));
 
-                // Labels
+                // Labels (call-centre semantics if Auto-Record is enabled)
+                bool callMode = autoRecordCalls && isDevModeEnabled;
+                const char* topLabel = callMode ? "ADVISOR" : "MIC";
+                const char* botLabel = callMode ? "CUSTOMER" : "SPK";
+
                 SetTextColor(mem, RGB(120, 120, 140));
                 SelectObject(mem, hFontSmall);
                 RECT lblMic = {drawX + 2, 1, drawX + meterW, 14};
-                DrawText(mem, "MIC", -1, &lblMic, DT_LEFT | DT_TOP | DT_SINGLELINE);
+                DrawText(mem, topLabel, -1, &lblMic, DT_LEFT | DT_TOP | DT_SINGLELINE);
                 RECT lblSpk = {drawX + 2, halfH + 1, drawX + meterW, halfH + 14};
-                DrawText(mem, "SPK", -1, &lblSpk, DT_LEFT | DT_TOP | DT_SINGLELINE);
+                DrawText(mem, botLabel, -1, &lblSpk, DT_LEFT | DT_TOP | DT_SINGLELINE);
 
                 drawX += meterW + margin;
 
@@ -1172,9 +1239,76 @@ LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             return 0;
 
         case WM_RBUTTONUP:
-            // Hide control panel
-            ShowWindow(hWnd, SW_HIDE);
+        case WM_CONTEXTMENU: {
+            // Build a proper context menu instead of silently hiding the panel.
+            // Right-click was previously hiding the window with no obvious way
+            // to bring it back, which felt like a crash.
+            POINT pt;
+            if (msg == WM_RBUTTONUP) {
+                pt.x = LOWORD(lParam);
+                pt.y = HIWORD(lParam);
+                ClientToScreen(hWnd, &pt);
+            } else {
+                pt.x = (short)LOWORD(lParam);
+                pt.y = (short)HIWORD(lParam);
+                if (pt.x == -1 && pt.y == -1) {
+                    RECT r; GetWindowRect(hWnd, &r);
+                    pt.x = r.left + 10; pt.y = r.top + 10;
+                }
+            }
+
+            HMENU hMenu = CreatePopupMenu();
+            if (hMenu) {
+                bool muted = IsDefaultMicMuted();
+                AppendMenu(hMenu, MF_STRING, CPMENU_TOGGLE_MUTE, muted ? "Unmute Microphone" : "Mute Microphone");
+                AppendMenu(hMenu, MF_SEPARATOR, 0, nullptr);
+                AppendMenu(hMenu, MF_STRING, CPMENU_MINI_TOGGLE, cpMiniMode ? "Expand Panel" : "Collapse to Mini");
+                AppendMenu(hMenu, MF_STRING, CPMENU_OPEN_SETTINGS, "Open Settings...");
+                AppendMenu(hMenu, MF_SEPARATOR, 0, nullptr);
+                AppendMenu(hMenu, MF_STRING, CPMENU_RESET_POS, "Reset Position");
+                AppendMenu(hMenu, MF_STRING, CPMENU_HIDE_PANEL, "Hide Control Panel");
+                AppendMenu(hMenu, MF_SEPARATOR, 0, nullptr);
+                AppendMenu(hMenu, MF_STRING, CPMENU_EXIT, "Exit MicMute-S");
+
+                SetForegroundWindow(hWnd);
+                int cmd = TrackPopupMenu(hMenu,
+                    TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN,
+                    pt.x, pt.y, 0, hWnd, nullptr);
+                DestroyMenu(hMenu);
+
+                switch (cmd) {
+                    case CPMENU_TOGGLE_MUTE:
+                        ToggleMute();
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                        break;
+                    case CPMENU_MINI_TOGGLE:
+                        cpMiniMode = !cpMiniMode;
+                        UpdateControlPanel();
+                        break;
+                    case CPMENU_OPEN_SETTINGS:
+                        SendMessage(hMainWnd, WM_COMMAND, ID_TRAY_OPEN, 0);
+                        break;
+                    case CPMENU_RESET_POS: {
+                        // Re-center near the bottom of the primary monitor
+                        int w, h;
+                        float scale = GetWindowScale(hWnd);
+                        GetPanelDimensions(panelSizeMode, scale, &w, &h);
+                        int sw = GetSystemMetrics(SM_CXSCREEN);
+                        int sh = GetSystemMetrics(SM_CYSCREEN);
+                        SetWindowPos(hWnd, nullptr, (sw - w) / 2, sh - h - 80, w, h, SWP_NOZORDER);
+                        SaveControlPanelPosition();
+                        break;
+                    }
+                    case CPMENU_HIDE_PANEL:
+                        HideControlPanel();
+                        break;
+                    case CPMENU_EXIT:
+                        SendMessage(hMainWnd, WM_COMMAND, ID_TRAY_EXIT, 0);
+                        break;
+                }
+            }
             return 0;
+        }
 
         default:
             return DefWindowProc(hWnd, msg, wParam, lParam);

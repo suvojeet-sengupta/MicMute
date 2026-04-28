@@ -174,18 +174,35 @@ private:
              pEndpointVolume.Reset();
         }
 
-        // 2. SPEAKER (Render) (Just for meter)
+        // 2. SPEAKER (Render) - meter only.
+        // Always re-acquire so the customer/SPK waveform survives default-output
+        // changes (e.g. user plugs in headphones mid-session). The previous code
+        // only initialised the meter once, which left the bottom waveform flat
+        // on any system that switched render devices after launch.
         ComPtr<IMMDevice> pNewRenderDevice;
         hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &pNewRenderDevice);
-        
-        if (SUCCEEDED(hr)) {
-            if (!pSpeakerDevice) {
+
+        if (SUCCEEDED(hr) && pNewRenderDevice) {
+            LPWSTR newId = nullptr;
+            pNewRenderDevice->GetId(&newId);
+            LPWSTR curId = nullptr;
+            if (pSpeakerDevice) pSpeakerDevice->GetId(&curId);
+
+            bool changed = !pSpeakerDevice
+                        || !pSpeakerMeterInfo
+                        || (newId && curId && wcscmp(newId, curId) != 0)
+                        || (newId && !curId);
+
+            if (changed) {
+                pSpeakerMeterInfo.Reset();
                 pSpeakerDevice = pNewRenderDevice;
                 pSpeakerDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, nullptr, (void**)&pSpeakerMeterInfo);
             }
+            if (newId) CoTaskMemFree(newId);
+            if (curId) CoTaskMemFree(curId);
         } else {
-             pSpeakerDevice.Reset();
-             pSpeakerMeterInfo.Reset();
+            pSpeakerDevice.Reset();
+            pSpeakerMeterInfo.Reset();
         }
         
         // Initial sync of mute state
@@ -398,4 +415,8 @@ float GetSpeakerLevel() {
 std::wstring GetMicDeviceName() {
     if (g_Audio) return g_Audio->GetDeviceName();
     return L"No Audio System";
+}
+
+void RefreshAudioDevices() {
+    if (g_Audio) g_Audio->UpdateDevices();
 }

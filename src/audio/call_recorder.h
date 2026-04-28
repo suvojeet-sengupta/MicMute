@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <string>
 #include <atomic>
+#include <mutex>
 #include <ctime>
 #include <map>
 
@@ -76,8 +77,14 @@ private:
 
     // State
     std::atomic<bool> enabled;
-    State currentState;
-    
+    std::atomic<State> currentState;
+
+    // Serializes state transitions across HTTP server thread + UI thread.
+    // ForceStartRecording / ForceStopRecording / Disable can race; without
+    // this mutex two near-simultaneous calls could interleave and either
+    // leak a recording or merge two calls into one file.
+    std::recursive_mutex stateMutex;
+
     // Timing
     ULONGLONG lastVoiceTime;      // Last time voice was detected
     ULONGLONG recordingStartTick; // When current recording started

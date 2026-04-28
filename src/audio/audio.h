@@ -19,3 +19,8 @@ bool IsDefaultMicMuted();
 float GetMicLevel();
 float GetSpeakerLevel();
 std::wstring GetMicDeviceName();
+
+// Force a re-scan of input + output devices. Called periodically so the
+// speaker meter follows the active default render device after the user
+// switches headphones / monitors / Bluetooth output.
+void RefreshAudioDevices();

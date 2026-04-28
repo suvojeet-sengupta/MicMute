@@ -14,7 +14,12 @@ void SetControlPanelSavedStatus(const std::string& filename);
 void LayoutControlPanel(HWND hWnd);
 LRESULT CALLBACK ControlPanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-// Position persistence
+// Show / hide the floating control panel (preserves position, never destroys).
+void ShowControlPanel();
+void HideControlPanel();
+bool IsControlPanelShown();
+
+// Position + visibility persistence
 void SaveControlPanelPosition();
 void LoadControlPanelPosition(int* x, int* y, int* w, int* h);
 
