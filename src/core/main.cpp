@@ -116,34 +116,31 @@ void UpdateLayout(HWND hWnd) {
         }
     };
 
-    MoveAndShow(hStartupCheck, contentX, startY, 300, 30);
-    MoveAndShow(hOverlayCheck, contentX, startY + gapY, 300, 30);
-    MoveAndShow(hMeterCheck, contentX, startY + gapY*2, 300, 30);
-    MoveAndShow(hRecorderCheck, contentX, startY + gapY*3, 300, 30);
-    MoveAndShow(hNotifyCheck, contentX, startY + gapY*4, 300, 30);
-    MoveAndShow(hBeepCheck, contentX, startY + gapY*5, 300, 30);
-    
+    MoveAndShow(hStartupCheck,  contentX, startY,             300, 30);
+    MoveAndShow(hNotifyCheck,   contentX, startY + gapY,      300, 30);
+    MoveAndShow(hBeepCheck,     contentX, startY + gapY*2,    300, 30);
+
     // Developer Mode
-    MoveAndShow(hDevModeCheck, contentX, startY + gapY*6, 350, 30);
+    MoveAndShow(hDevModeCheck,  contentX, startY + gapY*3,    350, 30);
     if (isDevModeEnabled) {
-        MoveAndShow(hGoToDevButtons, contentX, startY + gapY*7, 250, 30);
+        MoveAndShow(hGoToDevButtons, contentX, startY + gapY*4, 250, 30);
     } else {
         ShowWindow(hGoToDevButtons, SW_HIDE);
     }
 
-    // Extension Status (Gap 8 - moved up)
+    // Extension Status (only meaningful in dev mode)
     HWND hExtStatus = GetDlgItem(hWnd, 9998);
     if (hExtStatus) {
         if (isDevModeEnabled) {
-            MoveAndShow(hExtStatus, contentX, startY + gapY*8 + 8, 350, 20);
+            MoveAndShow(hExtStatus, contentX, startY + gapY*5 + 8, 350, 20);
         } else {
             ShowWindow(hExtStatus, SW_HIDE);
         }
     }
 
-    // Check Updates (Gap 9)
+    // Check Updates
     HWND hUpdateBtn = GetDlgItem(hWnd, ID_CHECK_UPDATE);
-    if (hUpdateBtn) MoveAndShow(hUpdateBtn, contentX, startY + gapY*9, 160, 30);
+    if (hUpdateBtn) MoveAndShow(hUpdateBtn, contentX, startY + gapY*6, 160, 30);
 
     // Hide/Unhide tab
     int showHide = isHide ? SW_SHOW : SW_HIDE;
@@ -737,12 +734,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 DrawText(hdc, curSize, -1, &rcCur, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
             }
 
-            // Call recording stats in General tab
+            // Call recording stats in General tab (placed below the Check for Updates button)
             if (currentTab == 0 && g_CallRecorder && isDevModeEnabled) {
                 SetTextColor(hdc, colorAccent);
                 SelectObject(hdc, hFontNormal);
                 int contentX = SIDEBAR_WIDTH + 40;
-                int statsY = 100 + 50 * 10 - scrollY;
+                int statsY = 100 + 50 * 7 - scrollY;
 
                 auto t = std::time(nullptr);
                 struct tm tm;
