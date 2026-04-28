@@ -1,7 +1,7 @@
 #include "core/globals.h"
 
 // Version
-const char* APP_VERSION = "v1.2.3";
+const char* APP_VERSION = "v1.2.4";
 
 // Variables
 NOTIFYICONDATA nid;
