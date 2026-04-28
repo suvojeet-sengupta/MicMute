@@ -232,6 +232,12 @@ public:
         UpdateDevices();
     }
 
+    // Public re-scan entry point used by RefreshAudioDevices() so the meter
+    // tracks default-render-device changes (Bluetooth headset connect, etc.).
+    void Refresh() {
+        UpdateDevices();
+    }
+
     void Stop() {
         std::lock_guard<std::mutex> lock(deviceMutex);
         if (pEndpointVolume && pVolumeCallback) {
@@ -418,5 +424,5 @@ std::wstring GetMicDeviceName() {
 }
 
 void RefreshAudioDevices() {
-    if (g_Audio) g_Audio->UpdateDevices();
+    if (g_Audio) g_Audio->Refresh();
 }
