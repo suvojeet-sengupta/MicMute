@@ -1,16 +1,24 @@
 {
   "manifest_version": 3,
   "name": "MicMute Ozonetel Connector",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Automatically triggers MicMute call recording when Ozonetel call is active",
   "permissions": [
-    "activeTab"
+    "activeTab",
+    "alarms"
   ],
   "host_permissions": [
     "*://*.ozonetel.com/*",
     "*://*.dishtv.ozonetel.com/*",
+    "http://127.0.0.1:9876/*",
     "http://localhost:9876/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "MicMute Connector"
+  },
   "content_scripts": [
     {
       "matches": [

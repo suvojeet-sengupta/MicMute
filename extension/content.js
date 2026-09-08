@@ -4,7 +4,6 @@
 (function () {
     'use strict';
 
-    const MICMUTE_SERVER = 'http://localhost:9876';
     let currentStatus = 'unknown';
     let isRecording = false;
 
@@ -149,33 +148,42 @@
         return details;
     }
 
-    // Send signal to MicMute local server
-    async function signalMicMute(action) {
-        try {
-            const metadata = (action === 'start' || action === 'stop') ? scrapeCallDetails() : {};
+    // Ask the service worker to talk to MicMute. The content script must not
+    // fetch localhost itself: it runs in the page's security context, so the
+    // request is at the mercy of the page CSP and CORS.
+    function signalMicMute(action) {
+        const metadata = (action === 'start' || action === 'stop') ? scrapeCallDetails() : {};
 
-            const response = await fetch(`${MICMUTE_SERVER}/${action}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    source: 'ozonetel',
-                    timestamp: Date.now(),
-                    metadata: metadata // Send scraped details
-                })
-            });
-
-            if (response.ok) {
-                console.log(`[MicMute Connector] Signal sent: ${action}`, metadata);
-                return true;
-            } else {
-                console.warn(`[MicMute Connector] Signal failed: ${action}`);
-                return false;
+        return new Promise(resolve => {
+            if (!isExtensionAlive()) {
+                resolve(false);
+                return;
             }
+            try {
+                chrome.runtime.sendMessage(
+                    { type: 'micmute-signal', action, metadata },
+                    response => {
+                        if (chrome.runtime.lastError) {
+                            resolve(false);
+                            return;
+                        }
+                        const ok = !!(response && response.ok);
+                        if (ok) console.log(`[MicMute Connector] Signal sent: ${action}`, metadata);
+                        resolve(ok);
+                    }
+                );
+            } catch (error) {
+                resolve(false);
+            }
+        });
+    }
+
+    // False once the extension is reloaded/updated - every chrome.* call from
+    // this orphaned script would throw "Extension context invalidated".
+    function isExtensionAlive() {
+        try {
+            return !!(chrome.runtime && chrome.runtime.id);
         } catch (error) {
-            // MicMute server might not be running
-            console.log(`[MicMute Connector] Cannot reach MicMute server: ${error.message}`);
             return false;
         }
     }
@@ -246,57 +254,94 @@
     `;
     document.head.appendChild(style);
 
-    // Start monitoring
-    console.log('[MicMute Connector] Ozonetel integration active');
+    // --- Link to the service worker -------------------------------------------
+    // The port is what tells the worker a monitored tab is open; it is also what
+    // keeps the worker alive so the 2s heartbeat to MicMute keeps flowing. If the
+    // worker is torn down the port drops and we reconnect, waking it again.
 
-    // --- Web Worker Based Timer Implementation ---
-    // This allows the timer to run in the background more reliably than setInterval on the main thread
+    let port = null;
+    let reconnectTimer = null;
 
-    const workerScript = `
-        let timerId = null;
-        let pingId = null;
-
-        self.onmessage = function(e) {
-            if (e.data === 'start') {
-                if (timerId) clearInterval(timerId);
-                if (pingId) clearInterval(pingId);
-                
-                // Poll checkStatusAndTrigger every 500ms
-                timerId = setInterval(() => {
-                    self.postMessage('tick');
-                }, 500);
-
-                // Ping every 2000ms
-                pingId = setInterval(() => {
-                    self.postMessage('ping');
-                }, 2000);
-            } else if (e.data === 'stop') {
-                clearInterval(timerId);
-                clearInterval(pingId);
-            }
-        };
-    `;
-
-    const blob = new Blob([workerScript], { type: 'application/javascript' });
-    const worker = new Worker(URL.createObjectURL(blob));
-
-    worker.onmessage = function (e) {
-        if (e.data === 'tick') {
-            checkStatusAndTrigger();
-        } else if (e.data === 'ping') {
-            signalMicMute('ping').catch(() => { });
+    function connectToWorker() {
+        if (!isExtensionAlive()) {
+            teardown();
+            return;
         }
-    };
 
-    // Initial check
-    setTimeout(checkStatusAndTrigger, 2000);
+        try {
+            port = chrome.runtime.connect({ name: 'micmute' });
+        } catch (error) {
+            scheduleReconnect();
+            return;
+        }
 
-    // Start the worker timer
-    worker.postMessage('start');
+        port.onMessage.addListener(message => {
+            if (message && message.type === 'micmute-connection') {
+                if (message.connected !== appConnected) {
+                    appConnected = message.connected;
+                    console.log(`[MicMute Connector] MicMute app ${appConnected ? 'detected' : 'NOT detected - is MicMute-S running?'}`);
+                }
+            }
+        });
 
-    // Also watch for DOM mutations (still useful when tab implies active)
-    const observer = new MutationObserver(() => {
+        port.onDisconnect.addListener(() => {
+            port = null;
+            scheduleReconnect();
+        });
+    }
+
+    function scheduleReconnect() {
+        if (reconnectTimer !== null || !isExtensionAlive()) return;
+        reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            connectToWorker();
+        }, 1000);
+    }
+
+    function teardown() {
+        clearInterval(pollTimer);
+        clearInterval(keepaliveTimer);
+        observer.disconnect();
+    }
+
+    let appConnected = false;
+
+    // Poll the DOM on a fixed cadence...
+    const pollTimer = setInterval(() => {
+        if (!isExtensionAlive()) {
+            teardown();
+            return;
+        }
         checkStatusAndTrigger();
+    }, 500);
+
+    // ...and nudge the worker so it does not idle out while this tab is open.
+    const keepaliveTimer = setInterval(() => {
+        if (!isExtensionAlive()) {
+            teardown();
+            return;
+        }
+        if (port) {
+            try {
+                port.postMessage({ type: 'keepalive' });
+            } catch (error) {
+                port = null;
+                scheduleReconnect();
+            }
+        } else {
+            scheduleReconnect();
+        }
+    }, 1000);
+
+    // Mutations on this page fire in bursts and getStatusText() reads
+    // document.body.innerText, so coalesce them instead of scanning per mutation.
+    let mutationTimer = null;
+    const observer = new MutationObserver(() => {
+        if (mutationTimer !== null) return;
+        mutationTimer = setTimeout(() => {
+            mutationTimer = null;
+            if (isExtensionAlive()) checkStatusAndTrigger();
+        }, 250);
     });
 
     observer.observe(document.body, {
@@ -304,4 +349,9 @@
         subtree: true,
         characterData: true
     });
+
+    // Start monitoring
+    console.log('[MicMute Connector] Ozonetel integration active');
+    connectToWorker();
+    setTimeout(checkStatusAndTrigger, 2000);
 })();

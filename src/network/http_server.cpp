@@ -5,6 +5,9 @@
 #include <thread>
 #include "core/globals.h"
 #include <atomic>
+#include <cctype>
+#include <cstdlib>
+#include <string>
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -19,9 +22,12 @@ static std::thread serverThread;
 #include <vector>
 
 // Extension connection tracking
-static ULONGLONG lastHeartbeatTime = 0;
+static std::atomic<ULONGLONG> lastHeartbeatTime(0);
 static std::atomic<bool> extensionConnected(false);
-#define HEARTBEAT_TIMEOUT_MS 5000  // 5 seconds without heartbeat = disconnected
+// The extension heartbeats every 2s from its service worker, which Chrome is
+// free to tear down and respawn between beats. Anything near 5s produced false
+// disconnects that cut live recordings short (see CallAutoRecorder::Poll).
+#define HEARTBEAT_TIMEOUT_MS 15000  // 15 seconds without heartbeat = disconnected
 
 // Very basic JSON parser for flat string key-value pairs
 // e.g. {"source":"ozonetel", "metadata":{"key":"value"}}
@@ -94,23 +100,54 @@ void SendResponse(SOCKET client, int statusCode, const char* statusText, const c
     send(client, response, (int)strlen(response), 0);
 }
 
+// Case-insensitive Content-Length lookup within the header block
+static size_t ParseContentLength(const std::string& request, size_t headerEnd) {
+    std::string headers = request.substr(0, headerEnd);
+    std::string lower = headers;
+    for (char& c : lower) c = (char)tolower((unsigned char)c);
+
+    size_t pos = lower.find("content-length:");
+    if (pos == std::string::npos) return 0;
+
+    long declared = strtol(headers.c_str() + pos + 15, nullptr, 10);
+    if (declared < 0) return 0;
+    return (size_t)declared;
+}
+
 // Handle incoming request
 void HandleRequest(SOCKET client) {
-    char buffer[BUFFER_SIZE];
-    int bytesReceived = recv(client, buffer, BUFFER_SIZE - 1, 0);
+    // The accept loop is single threaded, so never block on a stalled client.
+    DWORD recvTimeout = 2000;
+    setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (char*)&recvTimeout, (int)sizeof(recvTimeout));
 
-    if (bytesReceived <= 0) {
+    // Read until the headers are complete and the declared body has arrived.
+    // A single recv() would drop the call metadata whenever Chrome splits the
+    // POST across TCP segments.
+    std::string request;
+    char chunk[4096];
+    size_t headerEnd = std::string::npos;
+    size_t contentLength = 0;
+
+    while (request.size() < BUFFER_SIZE) {
+        headerEnd = request.find("\r\n\r\n");
+        if (headerEnd != std::string::npos) {
+            contentLength = ParseContentLength(request, headerEnd);
+            if (request.size() - (headerEnd + 4) >= contentLength) break;
+        }
+
+        int bytesReceived = recv(client, chunk, sizeof(chunk), 0);
+        if (bytesReceived <= 0) break;
+        request.append(chunk, bytesReceived);
+    }
+
+    if (request.empty()) {
         closesocket(client);
         return;
     }
 
-    // Guard against malicious/malformed lengths just in case
-    if (bytesReceived >= (int)BUFFER_SIZE) bytesReceived = (int)BUFFER_SIZE - 1;
-    buffer[bytesReceived] = '\0';
-
     // Parse HTTP method and path
     char method[16], path[256];
-    if (sscanf_s(buffer, "%15s %255s", method, (unsigned)_countof(method), path, (unsigned)_countof(path)) != 2) {
+    if (sscanf_s(request.c_str(), "%15s %255s", method, (unsigned)_countof(method), path, (unsigned)_countof(path)) != 2) {
         SendResponse(client, 400, "Bad Request", "{\"error\":\"malformed request\"}");
         closesocket(client);
         return;
@@ -123,27 +160,14 @@ void HandleRequest(SOCKET client) {
         return;
     }
 
-    // Find body (after double \r\n) and bound it by Content-Length when present
     std::string bodyStr;
-    char* bodyStart = strstr(buffer, "\r\n\r\n");
-    if (bodyStart) {
-        char* bodyData = bodyStart + 4;
-        int bodyAvail = bytesReceived - (int)(bodyData - buffer);
-        if (bodyAvail < 0) bodyAvail = 0;
-
-        int bodyLen = bodyAvail;
-        // Honor Content-Length if smaller than what we have buffered
-        const char* clHdr = strstr(buffer, "Content-Length:");
-        if (!clHdr) clHdr = strstr(buffer, "content-length:");
-        if (clHdr && clHdr < bodyStart) {
-            int declared = 0;
-            if (sscanf_s(clHdr + 15, " %d", &declared) == 1 && declared >= 0 && declared < bodyAvail) {
-                bodyLen = declared;
-            }
-        }
-        bodyStr.assign(bodyData, bodyLen);
+    if (headerEnd != std::string::npos) {
+        size_t bodyStart = headerEnd + 4;
+        size_t available = request.size() - bodyStart;
+        size_t bodyLen = (contentLength > 0 && contentLength < available) ? contentLength : available;
+        bodyStr = request.substr(bodyStart, bodyLen);
     }
-    
+
     // Handle POST requests
     if (strcmp(method, "POST") == 0) {
         if (strcmp(path, "/ping") == 0) {
@@ -288,7 +312,8 @@ bool IsExtensionConnected() {
     
     // Check if heartbeat timed out
     ULONGLONG now = GetTickCount64();
-    if (lastHeartbeatTime > 0 && (now - lastHeartbeatTime) > (ULONGLONG)HEARTBEAT_TIMEOUT_MS) {
+    ULONGLONG last = lastHeartbeatTime.load();
+    if (last > 0 && (now - last) > (ULONGLONG)HEARTBEAT_TIMEOUT_MS) {
         extensionConnected = false;
         return false;
     }
@@ -296,8 +321,9 @@ bool IsExtensionConnected() {
 }
 
 ULONGLONG GetTimeSinceLastHeartbeat() {
-    if (lastHeartbeatTime == 0) return _UI64_MAX;
-    return GetTickCount64() - lastHeartbeatTime;
+    ULONGLONG last = lastHeartbeatTime.load();
+    if (last == 0) return _UI64_MAX;
+    return GetTickCount64() - last;
 }
 
 void HttpForceStartRecording(const std::map<std::string, std::string>& metadata) {
